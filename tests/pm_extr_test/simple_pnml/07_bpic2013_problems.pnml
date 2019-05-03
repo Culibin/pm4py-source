@@ -2,6 +2,16 @@
 <pnml>
   <net id="net1" type="http://www.pnml.org/version-2009/grammar/pnmlcoremodel">
     <page id="n0">
+      <place id="end">
+        <name>
+          <text>end</text>
+        </name>
+      </place>
+      <place id="({'Accepted+In Progress'}, {'Completed+Closed'})">
+        <name>
+          <text>({'Accepted+In Progress'}, {'Completed+Closed'})</text>
+        </name>
+      </place>
       <place id="start">
         <name>
           <text>start</text>
@@ -10,44 +20,20 @@
           <text>1</text>
         </initialMarking>
       </place>
-      <place id="end">
-        <name>
-          <text>end</text>
-        </name>
-      </place>
-      <place id="({'Accepted+In Progress', 'Accepted+Assigned', 'Accepted+Wait'}, {'Accepted+Wait', 'Accepted+Assigned', 'Completed+Closed'})">
-        <name>
-          <text>({'Accepted+In Progress', 'Accepted+Assigned', 'Accepted+Wait'}, {'Accepted+Wait', 'Accepted+Assigned', 'Completed+Closed'})</text>
-        </name>
-      </place>
-      <transition id="Accepted+In Progress">
-        <name>
-          <text>Accepted+In Progress</text>
-        </name>
-      </transition>
       <transition id="Completed+Closed">
         <name>
           <text>Completed+Closed</text>
         </name>
       </transition>
-      <transition id="Accepted+Assigned">
+      <transition id="Accepted+In Progress">
         <name>
-          <text>Accepted+Assigned</text>
+          <text>Accepted+In Progress</text>
         </name>
       </transition>
-      <transition id="Accepted+Wait">
-        <name>
-          <text>Accepted+Wait</text>
-        </name>
-      </transition>
-      <arc id="-9223371855746324094" source="Accepted+Wait" target="({'Accepted+In Progress', 'Accepted+Assigned', 'Accepted+Wait'}, {'Accepted+Wait', 'Accepted+Assigned', 'Completed+Closed'})"/>
-      <arc id="-9223371855746324115" source="Accepted+In Progress" target="({'Accepted+In Progress', 'Accepted+Assigned', 'Accepted+Wait'}, {'Accepted+Wait', 'Accepted+Assigned', 'Completed+Closed'})"/>
-      <arc id="181108451697" source="({'Accepted+In Progress', 'Accepted+Assigned', 'Accepted+Wait'}, {'Accepted+Wait', 'Accepted+Assigned', 'Completed+Closed'})" target="Completed+Closed"/>
-      <arc id="-9223371855746323982" source="({'Accepted+In Progress', 'Accepted+Assigned', 'Accepted+Wait'}, {'Accepted+Wait', 'Accepted+Assigned', 'Completed+Closed'})" target="Accepted+Wait"/>
-      <arc id="181108451795" source="start" target="Accepted+In Progress"/>
-      <arc id="-9223371855746324206" source="({'Accepted+In Progress', 'Accepted+Assigned', 'Accepted+Wait'}, {'Accepted+Wait', 'Accepted+Assigned', 'Completed+Closed'})" target="Accepted+Assigned"/>
-      <arc id="181108451830" source="Accepted+Assigned" target="({'Accepted+In Progress', 'Accepted+Assigned', 'Accepted+Wait'}, {'Accepted+Wait', 'Accepted+Assigned', 'Completed+Closed'})"/>
-      <arc id="181108451837" source="Completed+Closed" target="end"/>
+      <arc id="-9223372029835186302" source="Accepted+In Progress" target="({'Accepted+In Progress'}, {'Completed+Closed'})"/>
+      <arc id="-9223372036556529909" source="Completed+Closed" target="end"/>
+      <arc id="7019589510" source="({'Accepted+In Progress'}, {'Completed+Closed'})" target="Completed+Closed"/>
+      <arc id="298252047" source="start" target="Accepted+In Progress"/>
     </page>
     <finalmarkings>
       <marking>

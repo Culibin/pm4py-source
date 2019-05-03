@@ -39,7 +39,7 @@ def visualize(ts, parameters=None):
     # arcs
     for t in ts.transitions:
         if show_labels:
-            viz.edge(str(t.from_state.name), str(t.to_state.name), label=t.name)
+            viz.edge(str(t.from_state.name), str(t.to_state.name), label=str(t.name))
         else:
             viz.edge(str(t.from_state.name), str(t.to_state.name))
 

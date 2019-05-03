@@ -8,3 +8,5 @@ class State(Enum):
     ENABLED = 2
     # open state
     OPEN = 3
+    # future enabled state
+    FUTURE_ENABLED = 4

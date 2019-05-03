@@ -2,9 +2,19 @@
 <pnml>
   <net id="net1" type="http://www.pnml.org/version-2009/grammar/pnmlcoremodel">
     <page id="n0">
-      <place id="({'O_Create Offer+complete'}, {'O_Created+complete'})">
+      <place id="({'O_Sent (mail and online)+complete', 'O_Sent (online only)+complete'}, {'O_Cancelled+complete', 'O_Returned+complete'})">
         <name>
-          <text>({'O_Create Offer+complete'}, {'O_Created+complete'})</text>
+          <text>({'O_Sent (mail and online)+complete', 'O_Sent (online only)+complete'}, {'O_Cancelled+complete', 'O_Returned+complete'})</text>
+        </name>
+      </place>
+      <place id="end">
+        <name>
+          <text>end</text>
+        </name>
+      </place>
+      <place id="({'O_Returned+complete'}, {'O_Accepted+complete'})">
+        <name>
+          <text>({'O_Returned+complete'}, {'O_Accepted+complete'})</text>
         </name>
       </place>
       <place id="start">
@@ -15,29 +25,19 @@
           <text>1</text>
         </initialMarking>
       </place>
-      <place id="({'O_Created+complete'}, {'O_Sent (online only)+complete', 'O_Sent (mail and online)+complete'})">
+      <place id="({'O_Created+complete'}, {'O_Sent (mail and online)+complete', 'O_Sent (online only)+complete'})">
         <name>
-          <text>({'O_Created+complete'}, {'O_Sent (online only)+complete', 'O_Sent (mail and online)+complete'})</text>
+          <text>({'O_Created+complete'}, {'O_Sent (mail and online)+complete', 'O_Sent (online only)+complete'})</text>
         </name>
       </place>
-      <place id="({'O_Sent (online only)+complete', 'O_Sent (mail and online)+complete'}, {'O_Cancelled+complete', 'O_Returned+complete'})">
+      <place id="({'O_Create Offer+complete'}, {'O_Created+complete'})">
         <name>
-          <text>({'O_Sent (online only)+complete', 'O_Sent (mail and online)+complete'}, {'O_Cancelled+complete', 'O_Returned+complete'})</text>
+          <text>({'O_Create Offer+complete'}, {'O_Created+complete'})</text>
         </name>
       </place>
-      <place id="({'O_Returned+complete'}, {'O_Accepted+complete'})">
+      <transition id="O_Create Offer+complete">
         <name>
-          <text>({'O_Returned+complete'}, {'O_Accepted+complete'})</text>
-        </name>
-      </place>
-      <place id="end">
-        <name>
-          <text>end</text>
-        </name>
-      </place>
-      <transition id="O_Sent (online only)+complete">
-        <name>
-          <text>O_Sent (online only)+complete</text>
+          <text>O_Create Offer+complete</text>
         </name>
       </transition>
       <transition id="O_Cancelled+complete">
@@ -45,24 +45,14 @@
           <text>O_Cancelled+complete</text>
         </name>
       </transition>
-      <transition id="O_Returned+complete">
-        <name>
-          <text>O_Returned+complete</text>
-        </name>
-      </transition>
-      <transition id="O_Create Offer+complete">
-        <name>
-          <text>O_Create Offer+complete</text>
-        </name>
-      </transition>
       <transition id="O_Sent (mail and online)+complete">
         <name>
           <text>O_Sent (mail and online)+complete</text>
         </name>
       </transition>
-      <transition id="O_Created+complete">
+      <transition id="O_Returned+complete">
         <name>
-          <text>O_Created+complete</text>
+          <text>O_Returned+complete</text>
         </name>
       </transition>
       <transition id="O_Accepted+complete">
@@ -70,20 +60,30 @@
           <text>O_Accepted+complete</text>
         </name>
       </transition>
-      <arc id="-9223371855749631968" source="O_Sent (online only)+complete" target="({'O_Sent (online only)+complete', 'O_Sent (mail and online)+complete'}, {'O_Cancelled+complete', 'O_Returned+complete'})"/>
-      <arc id="-9223371855749660798" source="O_Cancelled+complete" target="end"/>
-      <arc id="-9223371855749660924" source="start" target="O_Create Offer+complete"/>
-      <arc id="181105143942" source="({'O_Sent (online only)+complete', 'O_Sent (mail and online)+complete'}, {'O_Cancelled+complete', 'O_Returned+complete'})" target="O_Cancelled+complete"/>
-      <arc id="-9223371855749631800" source="({'O_Returned+complete'}, {'O_Accepted+complete'})" target="O_Accepted+complete"/>
-      <arc id="181105144040" source="O_Sent (mail and online)+complete" target="({'O_Sent (online only)+complete', 'O_Sent (mail and online)+complete'}, {'O_Cancelled+complete', 'O_Returned+complete'})"/>
-      <arc id="181105143886" source="({'O_Sent (online only)+complete', 'O_Sent (mail and online)+complete'}, {'O_Cancelled+complete', 'O_Returned+complete'})" target="O_Returned+complete"/>
-      <arc id="181105143984" source="({'O_Created+complete'}, {'O_Sent (online only)+complete', 'O_Sent (mail and online)+complete'})" target="O_Sent (online only)+complete"/>
-      <arc id="181105143921" source="O_Created+complete" target="({'O_Created+complete'}, {'O_Sent (online only)+complete', 'O_Sent (mail and online)+complete'})"/>
-      <arc id="-9223371855749660749" source="O_Accepted+complete" target="end"/>
-      <arc id="181105143893" source="({'O_Created+complete'}, {'O_Sent (online only)+complete', 'O_Sent (mail and online)+complete'})" target="O_Sent (mail and online)+complete"/>
-      <arc id="181105144054" source="O_Create Offer+complete" target="({'O_Create Offer+complete'}, {'O_Created+complete'})"/>
-      <arc id="-9223371855749631849" source="O_Returned+complete" target="({'O_Returned+complete'}, {'O_Accepted+complete'})"/>
-      <arc id="-9223371855749631877" source="({'O_Create Offer+complete'}, {'O_Created+complete'})" target="O_Created+complete"/>
+      <transition id="O_Sent (online only)+complete">
+        <name>
+          <text>O_Sent (online only)+complete</text>
+        </name>
+      </transition>
+      <transition id="O_Created+complete">
+        <name>
+          <text>O_Created+complete</text>
+        </name>
+      </transition>
+      <arc id="7042502625" source="({'O_Create Offer+complete'}, {'O_Created+complete'})" target="O_Created+complete"/>
+      <arc id="-9223372029812273180" source="O_Create Offer+complete" target="({'O_Create Offer+complete'}, {'O_Created+complete'})"/>
+      <arc id="-9223372029812273243" source="({'O_Returned+complete'}, {'O_Accepted+complete'})" target="O_Accepted+complete"/>
+      <arc id="-9223372029812273306" source="O_Accepted+complete" target="end"/>
+      <arc id="7042502632" source="start" target="O_Create Offer+complete"/>
+      <arc id="-9223372029812273173" source="O_Cancelled+complete" target="end"/>
+      <arc id="7042502604" source="O_Returned+complete" target="({'O_Returned+complete'}, {'O_Accepted+complete'})"/>
+      <arc id="-9223372029812273362" source="O_Sent (mail and online)+complete" target="({'O_Sent (mail and online)+complete', 'O_Sent (online only)+complete'}, {'O_Cancelled+complete', 'O_Returned+complete'})"/>
+      <arc id="-9223372029812273264" source="({'O_Created+complete'}, {'O_Sent (mail and online)+complete', 'O_Sent (online only)+complete'})" target="O_Sent (mail and online)+complete"/>
+      <arc id="-9223372029812273229" source="O_Sent (online only)+complete" target="({'O_Sent (mail and online)+complete', 'O_Sent (online only)+complete'}, {'O_Cancelled+complete', 'O_Returned+complete'})"/>
+      <arc id="7042502590" source="({'O_Created+complete'}, {'O_Sent (mail and online)+complete', 'O_Sent (online only)+complete'})" target="O_Sent (online only)+complete"/>
+      <arc id="-9223372029812273355" source="({'O_Sent (mail and online)+complete', 'O_Sent (online only)+complete'}, {'O_Cancelled+complete', 'O_Returned+complete'})" target="O_Cancelled+complete"/>
+      <arc id="7042502520" source="({'O_Sent (mail and online)+complete', 'O_Sent (online only)+complete'}, {'O_Cancelled+complete', 'O_Returned+complete'})" target="O_Returned+complete"/>
+      <arc id="-9223372029812273250" source="O_Created+complete" target="({'O_Created+complete'}, {'O_Sent (mail and online)+complete', 'O_Sent (online only)+complete'})"/>
     </page>
     <finalmarkings>
       <marking>
