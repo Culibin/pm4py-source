@@ -168,17 +168,19 @@ def add_node_syn_net(all_states, ts_system, old_node,trace, new_node_i_trace, ne
     if (State(new_node_i_trace, new_node_config) in all_states and model_move == True) or State(new_node_i_trace+1, new_node_config) in all_states and model_move == False  :
         edge_exists = False
         #if (model_move == False and len(trace) > new_node_i_trace) or model_move:
-        for outgoing in old_node.outgoing:
-            new_edge = None
-
-            new_edge = Move(trace[new_node_i_trace], new_node_operator)
-
-
-            if outgoing.name == new_edge:
-                print("Help")
-                # edge exists
-                edge_exists = True
-                ts_new_node = outgoing.to_state
+        new_edge = None
+        if model_move:
+            new_edge = Move(None, new_node_operator)
+        else:
+            new_edge = Move(trace[new_node_i_trace], None)
+            for outgoing in old_node.outgoing:
+                print("name ",outgoing.name, " edge ", new_edge )
+                if outgoing.name == new_edge:
+                    # todo what if same edge but different nodes
+                    print(old_node,' to ' ,State(new_node_i_trace, new_node_config) ," Help")
+                    # edge exists
+                    edge_exists = True
+                    ts_new_node = outgoing.to_state
 
 
         if edge_exists == False:
@@ -187,12 +189,10 @@ def add_node_syn_net(all_states, ts_system, old_node,trace, new_node_i_trace, ne
             else:
                 ts_new_node = all_states[all_states.index(State(new_node_i_trace+1, new_node_config))].node
 
-            if ts_new_node.name.model[0] == pt_st.State.CLOSED:
-                ts_util.add_arc_from_to(Move(None, None), old_node, ts_new_node, ts_system, None)
 
 
             #model move
-            elif model_move:
+            if model_move:
                 ts_util.add_arc_from_to(Move(None, new_node_operator), old_node, ts_new_node, ts_system, None)
             # log move
             else:
@@ -202,14 +202,6 @@ def add_node_syn_net(all_states, ts_system, old_node,trace, new_node_i_trace, ne
     else:
         work_pt_config = new_node_config.copy()
         new_state = None
-
-
-        if new_node_config[0] == pt_st.State.CLOSED:
-            ts_new_node = ts.TransitionSystem.State(State(new_node_i_trace, work_pt_config), None, None, None)
-            ts_system.states.add(ts_new_node)
-            new_state = State(new_node_i_trace, work_pt_config, ts_new_node)
-            ts_util.add_arc_from_to(Move(None, None), old_node, ts_new_node, ts_system, None)
-
         # model move
         if model_move:
             ts_new_node = ts.TransitionSystem.State(State(new_node_i_trace, work_pt_config), None, None, None)
@@ -227,17 +219,11 @@ def add_node_syn_net(all_states, ts_system, old_node,trace, new_node_i_trace, ne
         all_states.append(new_state)
 
     # sync move
-    if len(trace) > new_node_i_trace and new_node_operator == trace[new_node_i_trace] and model_move == True:
-        print(new_node_operator, " sync")
+    if len(trace) > new_node_i_trace and new_node_operator == trace[new_node_i_trace] and new_node_operator != None and model_move == True:
         ts_new_node_sync = ts.TransitionSystem.State(State(new_node_i_trace + 1, new_node_config.copy()), None, None, None)
         all_states.append(State(new_node_i_trace + 1, new_node_config.copy(), ts_new_node_sync))
         ts_system.states.add(ts_new_node_sync)
         ts_util.add_arc_from_to(Move(trace[new_node_i_trace], new_node_operator), old_node, ts_new_node_sync,ts_system, None)
-
-
-
-
-
 
     if ts_new_node == None:
         print("hilfe", edge_exists)
@@ -287,15 +273,24 @@ def execute_enabled(enabled, f_enabled, open, closed , pt_config ,ts_system ,fro
         work_closed = closed.copy()
         work_i_trace = i_trace
         vertex = enabled[v]
-        work_from_ts = from_ts #todo real copy ?
-        del work_enabled[v]  #  enabled.remove(vertex) todo check the delete
+        work_from_ts = from_ts   #todo real copy ?
+        work_enabled.remove(vertex)
         work_open.append(vertex)
         work_pt_config[vertex.index_c] = pt_st.State.OPEN
+
+
         if State(i_trace, work_pt_config) in all_states:
             # check if current node already exists
+            # simple connect is like a model move with a already existing new node
+            # connect for each log move
+
+            #do not recognize init nodes as  visited nodes
             if len(all_states) != len(trace)+1:
-                print("not knoe")
-                add_node_syn_net(all_states,ts_system, from_ts, trace, i_trace,work_pt_config, vertex.label)
+                new_from_node = from_ts
+                for t in range(i_trace, len(trace)+1):
+                    new_from_node = all_states[all_states.index(State(t, from_ts.name.model))].node
+                    add_node_syn_net(all_states,ts_system, new_from_node, trace, t,work_pt_config, vertex.label, True)
+
         else:
       #  execution_sequence.append((vertex, pt_st.State.OPEN)) #
             if len(vertex.children) > 0:
@@ -311,7 +306,10 @@ def execute_enabled(enabled, f_enabled, open, closed , pt_config ,ts_system ,fro
                         work_pt_config[vertex.children[i].index_c] = pt_st.State.FUTURE_ENABLED
                     execute_enabled(work_enabled, work_f_enabled, work_open, work_closed, work_pt_config, ts_system,
                                     work_from_ts,trace, work_i_trace, all_states, execution_sequence)
-                elif vertex.operator is pt_opt.Operator.LOOP:   # loop
+                # loop
+                elif vertex.operator is pt_opt.Operator.LOOP:
+
+
                     c = vertex.children[0]
                     work_enabled.append(c)
                     work_pt_config[c.index_c] = pt_st.State.ENABLED
@@ -356,22 +354,15 @@ def execute_enabled(enabled, f_enabled, open, closed , pt_config ,ts_system ,fro
                         execute_enabled(copy_work_enabled, work_f_enabled, copy_work_open, copy_work_closed, copy_work_pt_config, ts_system,
                                         work_from_ts, trace, work_i_trace, all_states, execution_sequence)
 
-                  #  execution_sequence.append((c, pt_st.State.ENABLED))
-
 
 
             else:
                 # Todo was ist bei tau ? das kein Move
-                # Todo alle endknoten muessen zu dem knoten n, CCCCC fueren da der zielknoten für a* ist (oder setzt zielknoten auf n, ein state davor (schlechte idee wenn mehrere knoten n knoten sind))
                 # model move
                 old_node = from_ts
                 dummy_new_node = add_node_syn_net(all_states, ts_system, from_ts, trace, i_trace,  work_pt_config, vertex.label, True)
+                #new node from current work_pt_config
                 ts_new_node = dummy_new_node
-
-                print(all_states)
-
-                if(i_trace != 0):
-                    print("i_trace nicht gleich 0")
 
                 # log move
                 for i in range(0,len(trace)):
@@ -382,35 +373,12 @@ def execute_enabled(enabled, f_enabled, open, closed , pt_config ,ts_system ,fro
                     add_node_syn_net(all_states, ts_system, dummy_old_node, trace, i+1,  work_pt_config, vertex.label, True) # connect from the logmove from old node to the new logmove (so an model move)
 
 
+                close(vertex, work_enabled,work_f_enabled, work_open, work_closed,work_pt_config, ts_system, all_states, from_ts, i_trace)
 
-
-                #redo loop by setting loop node to enabled and children to closed
-                parent = vertex.parent
-                if parent.operator is pt_opt.Operator.LOOP:
-                    if parent.children[0] != vertex:
-                        work_copy_enabled = work_enabled.copy()
-                        work_copy_open = work_open.copy()
-                        work_copy_closed = work_closed.copy()
-
-                        work_copy_enabled.append(parent)
-                        work_copy_open.remove(parent)
-
-                        work_copy_closed.append(vertex)
-                        work_copy_open.remove(vertex)
-
-                        execute_enabled(work_copy_enabled, work_f_enabled, work_copy_open, work_copy_closed, work_pt_config, ts_system,
-                                        work_from_ts, trace, work_i_trace, all_states, execution_sequence)
-
-                close(vertex, work_enabled,work_f_enabled, work_open, work_closed,work_pt_config,execution_sequence)
-
-
-                # transition to end configuration
-
-                if (len(work_enabled)+len(work_f_enabled) + len(work_open)) == 0:
-                    print(all_states)
+                if (len(work_enabled) + len(work_enabled) + len(work_open) + len(work_f_enabled)) == 0:
                     j = all_states.index(State(len(trace), ts_new_node.name.model))
-                    add_node_syn_net(all_states, ts_system, all_states[j].node, trace, len(trace), work_pt_config, None, True)
-
+                    add_node_syn_net(all_states, ts_system, all_states[j].node, trace, len(trace), work_pt_config, None,
+                                     True)
 
 
 
@@ -437,7 +405,7 @@ def populate_closed(nodes, closed):
         populate_closed(node.children, closed)
 
 
-def close(vertex,  enabled, f_enabled, open, closed,pt_config,  execution_sequence):
+def close(vertex,  enabled, f_enabled, open, closed,pt_config, ts_system, all_states, from_ts, i_trace):
     """
     Close a given vertex of the process tree
 
@@ -455,14 +423,18 @@ def close(vertex,  enabled, f_enabled, open, closed,pt_config,  execution_sequen
         Execution sequence on the process tree
     """
 
+    # transition to end configuration
+
+
+
     open.remove(vertex)
     closed.append(vertex)
     pt_config[vertex.index_c] = pt_st.State.CLOSED
     # execution_sequence.append((vertex, pt_st.State.CLOSED))
-    process_closed(vertex, enabled, f_enabled, open, closed, pt_config, execution_sequence)
+    process_closed(vertex, enabled, f_enabled, open, closed, pt_config, ts_system, all_states, from_ts, i_trace)
 
 
-def process_closed(closed_node, enabled, f_enabled, open, closed,pt_config, execution_sequence):
+def process_closed(closed_node, enabled, f_enabled, open, closed,pt_config, ts_system, all_states, from_ts, i_trace):
 
     """
     Process a closed node, deciding further operations
@@ -483,44 +455,57 @@ def process_closed(closed_node, enabled, f_enabled, open, closed,pt_config, exec
     vertex = closed_node.parent
     if vertex is not None and vertex in open:
         if should_close(vertex, closed, closed_node, enabled, f_enabled):
-            close(vertex, enabled, f_enabled, open, closed,pt_config,execution_sequence)
+          close(vertex, enabled, f_enabled, open, closed,pt_config, ts_system, all_states, from_ts, i_trace)
         else:
             enable = None
             if vertex.operator is pt_opt.Operator.SEQUENCE:
                 enable = vertex.children[vertex.children.index(closed_node) + 1]
                 f_enabled.remove(enable)
-            elif vertex.operator is pt_opt.Operator.LOOP: # sets future enabled to enabled
-                for i in range(1,len(vertex.children)):
+            # sets future enabled to enabled
+            elif vertex.operator is pt_opt.Operator.LOOP:
+
+
+                for i in range(0,len(vertex.children)):
                     if vertex.children[i] in f_enabled:
                         if enable is None:
                             enable = vertex.children[i]
                             f_enabled.remove(enable)
                             pt_config[enable.index_c] = pt_st.State.ENABLED
 
+                if enabled is not None:
+                    f_enabled.append(vertex)
+                    open.remove(vertex)
+                    pt_config[vertex.index_c] = pt_st.State.FUTURE_ENABLED
+
             if enable is not None:
-                enabled.append(enable)
-                # execution_sequence.append((enable, pt_st.State.ENABLED))
+               enabled.append(enable)
+    if vertex is not None and vertex in f_enabled:
+        if should_close(vertex, closed, closed_node, enabled, f_enabled):
+            enabled.append(vertex)
+            f_enabled.remove(vertex)
+            pt_config[vertex.index_c] = pt_st.State.ENABLED
+
 
 
 def should_close(vertex, closed, child, enabled, f_enabled):
     """
-    Decides if a parent vertex shall be closed based on
-    the processed child
+     Decides if a parent vertex shall be closed based on
+     the processed child
 
-    Parameters
-    ------------
-    vertex
-        Vertex of the process tree
-    closed
-        Set of closed nodes
-    child
-        Processed child
+     Parameters
+     ------------
+     vertex
+         Vertex of the process tree
+     closed
+         Set of closed nodes
+     child
+         Processed child
 
-    Returns
-    ------------
-    boolean
-        Boolean value (the vertex shall be closed)
-    """
+     Returns
+     ------------
+     boolean
+         Boolean value (the vertex shall be closed)
+     """
 
     if vertex.children is None:
         return True
@@ -565,7 +550,6 @@ def config_in_search_tree(pt_config,i_trace , ex_tree):
 
 
 
-
 trace = list()
 #for i in range(0,3):
 #    trace.append('a')
@@ -573,9 +557,10 @@ trace.append('a')
 trace.append('b')
 trace.append('c')
 
-#tree = pt_util.parse("+('a','b','c')")
-#tree =  pt_util.parse("->(*('a','d'),'b','c')")
 tree = pt_util.parse("->('a','b','c')")
+#tree =  pt_util.parse("->(*('a','d'),'b','c')")
+#tree = pt_util.parse("+('a','b','c')")
+#tree = pt_util.parse("+('a','b')")
 
 print('test label: ', tree.label, ' operator: ', tree.operator)
 
