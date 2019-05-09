@@ -124,10 +124,10 @@ trace = list()
 # for i in range(0,3):
 #    trace.append('a')
 trace.append('a')
-#trace.append('b')
+trace.append('b')
 trace.append('c')
 
-tree = pt_util.parse("->('a','b','c')")
+tree = pt_util.parse("X('a','b','c')")
 # tree =  pt_util.parse("->(*('a','d'),'b','c')")
 # tree = pt_util.parse("+('a','b','c')")
 # tree = pt_util.parse("+('a','b')")

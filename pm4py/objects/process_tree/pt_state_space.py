@@ -2,8 +2,6 @@ from pm4py.objects.process_tree import pt_operator as pt_opt
 from pm4py.objects.process_tree import state as pt_st
 from pm4py.objects.transition_system import transition_system as ts
 from pm4py.objects.transition_system import utils as ts_util
-from pm4py.visualization.transition_system.util import visualize_graphviz as visual_ts
-from pm4py.visualization.transition_system import factory as visual_ts_factory
 
 
 class Move(object):
@@ -115,7 +113,6 @@ def execute(pt, trace):
     enabled, f_enabled, open, closed = list(), list(), list(), list()
     enabled.append(pt)
     populate_closed(pt.children, closed) # set all child nodes to closed
-    execution_sequence = list()
 
     print('Start closed', closed)
 
@@ -137,34 +134,31 @@ def execute(pt, trace):
     for i in range(0, len(trace)):
         dummy_node = add_node_syn_net(all_states, ts_system,dummy_node ,trace,i,pt_config, None, False)
 
-    print("---",all_states)
-
     execute_enabled(enabled, f_enabled, open, closed, pt_config,ts_system,root, trace,0, all_states)
     print(enabled)
 
     return ts_system
 
 
-def add_node_syn_net(all_states, ts_system, old_node,trace, new_node_i_trace, new_node_config
+def add_node_syn_net(all_states, ts_system, old_node, trace, new_node_i_trace, new_node_config
                      , new_node_operator, model_move):
     ts_new_node = None
 
     if(State(new_node_i_trace, new_node_config) in all_states and model_move == True) \
             or State(new_node_i_trace+1, new_node_config) in all_states and model_move == False:
         edge_exists = False
-        new_edge = None
-        if model_move:
-            new_edge = Move(None, new_node_operator)
-        else:
-            new_edge = Move(trace[new_node_i_trace], None)
-            for outgoing in old_node.outgoing:
-                print("name ",outgoing.name, " edge ", new_edge )
-                if outgoing.name == new_edge:
-                    # todo what if same edge but different nodes
-                    print(old_node,' to ' ,State(new_node_i_trace, new_node_config) ," Help")
-                    # edge exists
-                    edge_exists = True
-                    ts_new_node = outgoing.to_state
+        # TODO Check this case
+        """"
+        new_edge = Move(trace[new_node_i_trace], None)
+        for outgoing in old_node.outgoing:
+            print("name ",outgoing.name, " edge ", new_edge )
+            if outgoing.name == new_edge:
+                # todo what if same edge but different nodes
+                print(old_node,' to ' ,State(new_node_i_trace, new_node_config) ," Help")
+                # edge exists
+                edge_exists = True
+                ts_new_node = outgoing.to_state
+        """
 
         if edge_exists is False:
             if model_move:
@@ -208,8 +202,6 @@ def add_node_syn_net(all_states, ts_system, old_node,trace, new_node_i_trace, ne
         ts_util.add_arc_from_to(Move(trace[new_node_i_trace], new_node_operator)
                                 , old_node, ts_new_node_sync, ts_system, None)
 
-    if ts_new_node is None:
-        print("hilfe", edge_exists)
     return ts_new_node
 
 
@@ -226,13 +218,7 @@ def execute_enabled(enabled, f_enabled, open, closed , pt_config ,ts_system ,fro
         Open nodes
     closed
         Closed nodes
-    execution_sequence
-        Execution sequence
 
-    Returns
-    -----------
-    execution_sequence
-        Execution sequence
     """
     length_enabled = len(enabled)
     for v in range(0, length_enabled):
@@ -257,10 +243,10 @@ def execute_enabled(enabled, f_enabled, open, closed , pt_config ,ts_system ,fro
 
             # do not recognize init nodes as  visited nodes
             if len(all_states) != len(trace)+1:
-                new_from_node = from_ts
+                # new_from_node = from_ts
                 for t in range(i_trace, len(trace)+1):
                     new_from_node = all_states[all_states.index(State(t, from_ts.name.model))].node
-                    add_node_syn_net(all_states,ts_system, new_from_node, trace, t,work_pt_config, vertex.label, True)
+                    add_node_syn_net(all_states, ts_system, new_from_node, trace, t,work_pt_config, vertex.label, True)
 
         else:
             if len(vertex.children) > 0:
@@ -275,7 +261,7 @@ def execute_enabled(enabled, f_enabled, open, closed , pt_config ,ts_system ,fro
                         work_f_enabled.append(vertex.children[i])
                         work_pt_config[vertex.children[i].index_c] = pt_st.State.FUTURE_ENABLED
                     execute_enabled(work_enabled, work_f_enabled, work_open, work_closed, work_pt_config, ts_system,
-                                    work_from_ts,trace, work_i_trace, all_states)
+                                    work_from_ts, trace, work_i_trace, all_states)
                 # loop
                 elif vertex.operator is pt_opt.Operator.LOOP:
 
@@ -286,9 +272,10 @@ def execute_enabled(enabled, f_enabled, open, closed , pt_config ,ts_system ,fro
 
                     # No redo
                     execute_enabled(work_enabled, work_f_enabled, work_open, work_closed, work_pt_config, ts_system,
-                                    work_from_ts,trace, work_i_trace, all_states)
+                                    work_from_ts, trace, work_i_trace, all_states)
 
-                    for i in range(1, len(vertex.children)):  # all redo possibilities
+                    # all redo possibilities
+                    for i in range(1, len(vertex.children)):
                         c = vertex.children[i]
                         copy_work_f_enabled = work_f_enabled.copy()
                         copy_work_f_enabled.append(c)
@@ -342,11 +329,12 @@ def execute_enabled(enabled, f_enabled, open, closed , pt_config ,ts_system ,fro
                                                       , trace, i, work_pt_config, vertex.label, False)
                     # getting the log move from node
                     dummy_old_node = all_states[all_states.index(State(i+1, old_node.name.model))].node
+
                     # connect from the log move from old node to the new log move (so an model move)
                     add_node_syn_net(all_states, ts_system, dummy_old_node, trace, i+1
                                      , work_pt_config, vertex.label, True)
 
-                close(vertex, work_enabled, work_f_enabled, work_open, work_closed,work_pt_config
+                close(vertex, work_enabled, work_f_enabled, work_open, work_closed, work_pt_config
                       , ts_system, all_states, from_ts, i_trace)
                 # transition to end configuration
                 if (len(work_enabled) + len(work_enabled) + len(work_open) + len(work_f_enabled)) == 0:
@@ -389,8 +377,6 @@ def close(vertex,  enabled, f_enabled, open, closed,pt_config, ts_system, all_st
         Set of open nodes
     closed
         Set of closed nodes
-    execution_sequence
-        Execution sequence on the process tree
     """
     open.remove(vertex)
     closed.append(vertex)
@@ -414,8 +400,6 @@ def process_closed(closed_node, enabled, f_enabled, open, closed,pt_config, ts_s
         Set of open nodes
     closed
         Set of closed nodes
-    execution_sequence
-        Execution sequence on the process tree
     """
     vertex = closed_node.parent
     if vertex is not None and vertex in open:
@@ -500,9 +484,3 @@ def config_in_search_tree(pt_config, i_trace, ex_tree):
         if i_trace == edges.pop():
             new_entry = False
 
-    if new_entry == False:
-        for i in range(0, len(pt_config)):
-            edges = current_node.outgoing.copy()
-            for j in range(0, len(edges)):
-                if pt_config[i] == edges.pop():
-                    new_entry == False
