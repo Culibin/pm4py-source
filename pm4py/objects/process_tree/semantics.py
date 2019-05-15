@@ -54,7 +54,7 @@ def execute(pt):
     exec_sequence
         Execution sequence on the process tree
     """
-    # TODO: add future enabeled
+    # TODO: add future enabled
     enabled, open, closed = set(), set(), set()
     enabled.add(pt)
     populate_closed(pt.children, closed)

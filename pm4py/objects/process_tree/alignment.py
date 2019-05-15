@@ -4,6 +4,9 @@ import heapq
 from pm4py.visualization.transition_system.util import visualize_graphviz as visual_ts
 from pm4py.visualization.transition_system import factory as visual_ts_factory
 
+SKIP = ">>"
+TAU = '\u03C4'
+
 # used for heap to help compare tuples
 counter = 0
 
@@ -12,13 +15,13 @@ def apply_cost_function(ts_system, lm_cost, mm_cost, tau_cost, sync_cost):
 
     for edge in ts_system.transitions:
         # tau
-        if edge.name.log is None and edge.name.model is None:
+        if edge.name.log is TAU or edge.name.model is TAU:
             edge.data['cost'] = tau_cost
         # model move
-        elif edge.name.log is None:
+        elif edge.name.log is SKIP:
             edge.data['cost'] = mm_cost
         # log move
-        elif edge.name.model is None:
+        elif edge.name.model is SKIP:
             edge.data['cost'] = lm_cost
         # sync move
         else:
@@ -53,6 +56,7 @@ def a_star_search(ts_system, root, goal):
 
 
 def expand_node(c_node, open_list, closed_list):
+
     for outgoing in c_node.outgoing:
         successor = outgoing.to_state
 
@@ -124,13 +128,13 @@ trace = list()
 # for i in range(0,3):
 #    trace.append('a')
 trace.append('a')
-trace.append('b')
-trace.append('c')
+#trace.append('b')
+#trace.append('c')
 
-tree = pt_util.parse("X('a','b','c')")
+tree = pt_util.parse("X('a','b')")
 # tree =  pt_util.parse("->(*('a','d'),'b','c')")
 # tree = pt_util.parse("+('a','b','c')")
-# tree = pt_util.parse("+('a','b')")
+#tree = pt_util.parse("+('a','b')")
 
 ts_system = pt_state_space.execute(tree, trace)
 
@@ -154,3 +158,6 @@ if a_star_search(ts_system, root, goal) != 0:
 
 graph = visual_ts.visualize(ts_system)
 visual_ts_factory.view(graph)
+
+#book example
+#tree = pt_util.parse("->('As', X( ->(+('Fa', *( ->('SSo', 'Ro'), 'Co')) , X(->('Ao', 'Aan'), ->('Do', 'Da2')))) ,'Da1') ,'Af')")
