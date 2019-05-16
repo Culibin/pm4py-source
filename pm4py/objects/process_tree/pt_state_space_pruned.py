@@ -115,23 +115,59 @@ class State(object):
     node = property(_get_node)
     state_set = property(_get_state_set, _set_state_set)
 
+
 class StateSet(object):
-    def __init__(self, states):
+    def __init__(self, log, states, node, vertex_id):
+        self._log = log
+        self._vertex_id = vertex_id
+        self._node = node
+        self._node.name = self
+
         if isinstance(states, State):
             self._states = [states]
+            self._node.incoming = self._node.incoming.union(node.incoming)
+            self._node.outgoing = self._node.outgoing.union(node.outgoing)
 
         else:
             self._states = states
+            for i in states:
+                for j in i.incoming:
+                    j.to_state = self._node
+                for j in i.outgoing:
+                    j.from_state = self._node
+                self._node.incoming = self._node.incoming.union(i.node.incoming)
+                self._node.outgoing = self._node.outgoing.union(i.node.outgoing)
 
-    def states(self):
+    def _set_log(self, log):
+        self._log = log
+
+    def _get_log(self):
+        return self._log
+
+    def _get_states(self):
         return self._states
+
+    def _get_model(self):
+        return self._model
+
+    def _get_node(self):
+        return self._node
 
     def add_state(self, state):
         self._states.append(state)
+        for i in state.incoming:
+            i.to_state = self._node
+        for i in state.outgoing:
+            i.from_state = self._node
+        self._node.incoming = self._node.incoming.union(state.incoming)
+        self._node.outgoing = self._node.outgoing.union(state.outgoing)
+
+    def _get_vertex_id(self):
+        return self._vertex_id
 
     def __repr__(self):
         if len(self._states) > 1:
-            string = "(" + self._states + ", ("
+            string = "(" + str(self._states[0])
 
             for i in range(1, len(self._states)):
                 string += ', ' + str(self._states[i])
@@ -157,13 +193,29 @@ class StateSet(object):
         else:
             for i in self._states:
                 exists = False
-                for j in other:
+                for j in other.states:
                     if i == j:
                         exists = True
                 if exists is False:
                     return False
             return True
 
+    def has_state(self, state):
+        if isinstance(state, State):
+
+            for i in self._states:
+                if state == i:
+                    return True
+            return False
+        else:
+            print("false")
+            # todo check ob teilmenge vorhanden ist wenn state = stateset
+            return False
+
+    id = property(_get_vertex_id)
+    node = property(_get_node)
+    log = property(_get_log, _set_log)
+    states = property(_get_states)
 
 def execute(pt, trace):
     """
@@ -199,6 +251,7 @@ def execute(pt, trace):
     ts_system.states.add(root)
     init_state = State(0, pt_config, root)
     all_states = list()
+    stateset_list = list()
     all_states.append(init_state)
 
     dummy_node = root
@@ -206,7 +259,7 @@ def execute(pt, trace):
     for i in range(0, len(trace)):
         dummy_node = add_node_syn_net(all_states, ts_system, dummy_node, trace, i, pt_config, None, False)
 
-    execute_enabled(enabled, f_enabled, open, closed, pt_config, ts_system, root, trace, 0, all_states)
+    execute_enabled(enabled, f_enabled, open, closed, pt_config, ts_system, root, trace, 0, all_states, stateset_list)
     print(enabled)
 
     return ts_system
@@ -295,7 +348,8 @@ def add_node_syn_net(all_states, ts_system, old_node, trace, new_node_i_trace,
     return ts_new_node
 
 
-def execute_enabled(enabled, f_enabled, open, closed, pt_config, ts_system, from_ts, trace, i_trace, all_states):
+def execute_enabled(enabled, f_enabled, open, closed, pt_config, ts_system, from_ts, trace,
+                    i_trace, all_states, stateset_list):
 
     """
     Execute an enabled node of the process tree
@@ -351,7 +405,7 @@ def execute_enabled(enabled, f_enabled, open, closed, pt_config, ts_system, from
                         work_f_enabled.append(vertex.children[i])
                         work_pt_config[vertex.children[i].index_c] = pt_st.State.FUTURE_ENABLED
                     execute_enabled(work_enabled, work_f_enabled, work_open, work_closed, work_pt_config, ts_system,
-                                    work_from_ts, trace, work_i_trace, all_states)
+                                    work_from_ts, trace, work_i_trace, all_states, stateset_list)
                 # loop
                 elif vertex.operator is pt_opt.Operator.LOOP:
 
@@ -369,7 +423,7 @@ def execute_enabled(enabled, f_enabled, open, closed, pt_config, ts_system, from
                     work_closed.remove(c)
 
                     execute_enabled(work_enabled, work_f_enabled, work_open, work_closed, work_pt_config, ts_system,
-                                    work_from_ts, trace, work_i_trace, all_states)
+                                    work_from_ts, trace, work_i_trace, all_states, stateset_list)
 
                     # Redo
                     c = vertex.children[1]
@@ -386,7 +440,7 @@ def execute_enabled(enabled, f_enabled, open, closed, pt_config, ts_system, from
                     copy_work_pt_config[c.index_c] = pt_st.State.FUTURE_ENABLED
 
                     execute_enabled(work_enabled, copy_work_f_enabled, work_open, copy_work_closed,
-                                    copy_work_pt_config, ts_system, work_from_ts, trace, work_i_trace, all_states)
+                                    copy_work_pt_config, ts_system, work_from_ts, trace, work_i_trace, all_states, stateset_list)
                 # parallel
                 elif vertex.operator is pt_opt.Operator.PARALLEL:
                     work_enabled.extend(vertex.children)
@@ -412,7 +466,7 @@ def execute_enabled(enabled, f_enabled, open, closed, pt_config, ts_system, from
                         copy_work_pt_config[vertex.children[i].index_c] = pt_st.State.ENABLED
 
                         execute_enabled(copy_work_enabled, work_f_enabled, copy_work_open, copy_work_closed,
-                                        copy_work_pt_config, ts_system, work_from_ts, trace, work_i_trace, all_states)
+                                        copy_work_pt_config, ts_system, work_from_ts, trace, work_i_trace, all_states, stateset_list)
 
             # encountered leaf
             else:
@@ -435,8 +489,9 @@ def execute_enabled(enabled, f_enabled, open, closed, pt_config, ts_system, from
                     add_node_syn_net(all_states, ts_system, dummy_old_node, trace, i+1,
                                      work_pt_config, vertex.label, True)
 
+
                 close(vertex, work_enabled, work_f_enabled, work_open, work_closed, work_pt_config,
-                      ts_system, all_states, from_ts, i_trace)
+                      ts_system, all_states, from_ts, i_trace, stateset_list, ts_new_node)
 
                 if vertex.parent.operator == pt_opt.Operator.LOOP and vertex.parent in work_f_enabled:
 
@@ -463,14 +518,24 @@ def execute_enabled(enabled, f_enabled, open, closed, pt_config, ts_system, from
                     # transition to end configuration
 
                     if (len(work_enabled) + len(work_enabled) + len(work_open) + len(work_f_enabled)) == 0:
-                        j = all_states.index(State(len(trace), ts_new_node.name.model))
-                        add_node_syn_net(all_states, ts_system, all_states[j].node, trace, len(trace)
-                                         , work_pt_config, TAU, True)
+
+                        if isinstance(ts_new_node.name, State) and ts_new_node.name is None:
+
+                            j = all_states.index(State(len(trace), ts_new_node.name.model))
+                            add_node_syn_net(all_states, ts_system, all_states[j].node, trace, len(trace)
+                                             , work_pt_config, TAU, True)
+
+                        else:
+                            for i in stateset_list:
+                                print('test3 from ', i, ts_new_node.name, i.log, len(trace))
+                                if i.has_state(ts_new_node.name) and i.log == len(trace):
+                                    print('test3 from ', i)
+                                    add_node_syn_net(all_states, ts_system, i, trace, len(trace)
+                                                     , work_pt_config, TAU, True)
+
 
                     execute_enabled(work_enabled, work_f_enabled, work_open, work_closed, work_pt_config, ts_system,
-                                    ts_new_node, trace, work_i_trace,all_states)
-
-
+                                    ts_new_node, trace, work_i_trace, all_states, stateset_list)
 
 
 def populate_closed(nodes, closed):
@@ -490,7 +555,35 @@ def populate_closed(nodes, closed):
         populate_closed(node.children, closed)
 
 
-def close(vertex,  enabled, f_enabled, open, closed,pt_config, ts_system, all_states, from_ts, i_trace):
+def fuse_to_StateSet(stateset_list, vertex_id, state, ts, trace, all_states):
+
+    #  has vertex already a StateSet ?
+    found = False
+
+    for i in stateset_list:
+
+        if i.id == vertex_id:
+            added_state = all_states[all_states.index(State(i.log, state.model))]
+            i.add_state(added_state.node)
+            found = True
+
+            added_state.state_set = i
+            ts.states.remove(added_state.node)
+    if found is False:
+        new_state_set = StateSet(state.log, state, state.node, vertex_id)
+        stateset_list.append(new_state_set)
+
+        state.state_set = new_state_set
+
+        for t in range(1, len(trace) + 1):
+            new_state = all_states[all_states.index(State(t, state.model))].node
+            new_state_set = StateSet(new_state.name.log, new_state.name, new_state, vertex_id)
+            stateset_list.append(new_state_set)
+
+            new_state.state_set = new_state_set
+
+
+def close(vertex, enabled, f_enabled, open, closed,pt_config, ts_system, all_states, from_ts, i_trace, stateset_list, bottom_vertex=None):
     """
     Close a given vertex of the process tree
 
@@ -508,10 +601,10 @@ def close(vertex,  enabled, f_enabled, open, closed,pt_config, ts_system, all_st
     open.remove(vertex)
     closed.append(vertex)
     pt_config[vertex.index_c] = pt_st.State.CLOSED
-    process_closed(vertex, enabled, f_enabled, open, closed, pt_config, ts_system, all_states, from_ts, i_trace)
+    process_closed(vertex, enabled, f_enabled, open, closed, pt_config, ts_system, all_states, from_ts, i_trace, stateset_list, bottom_vertex)
 
 
-def process_closed(closed_node, enabled, f_enabled, open, closed, pt_config, ts_system, all_states, from_ts, i_trace):
+def process_closed(closed_node, enabled, f_enabled, open, closed, pt_config, ts_system, all_states, from_ts, i_trace, stateset_list, bottom_vertex):
 
     """
     Process a closed node, deciding further operations
@@ -527,6 +620,8 @@ def process_closed(closed_node, enabled, f_enabled, open, closed, pt_config, ts_
     closed
         Set of closed nodes
     """
+
+
     vertex = closed_node.parent
     if vertex is not None and vertex in open:
         if should_close(vertex, closed, closed_node, enabled, f_enabled):
@@ -538,17 +633,13 @@ def process_closed(closed_node, enabled, f_enabled, open, closed, pt_config, ts_
                 pt_config[vertex.index_c] = pt_st.State.FUTURE_ENABLED
 
             else:
-                if vertex.operator is pt_opt.Operator.XOR:
-                    vertex = vertex
-                    # if all_states[vertex.index_c].state_set is not None:
 
-                    #else:
-
-                    # todo implement pruning
+                if vertex.operator is pt_opt.Operator.XOR and bottom_vertex is not None:
+                    fuse_to_StateSet(stateset_list, vertex.index_c, all_states[all_states.index(bottom_vertex)], ts_system, trace, all_states)
                 elif vertex.operator is pt_opt.Operator.PARALLEL:
-                    vertex = vertex
-                    # todo implement pruning
-                close(vertex, enabled, f_enabled, open, closed, pt_config, ts_system, all_states, from_ts, i_trace)
+                    fuse_to_StateSet(stateset_list, vertex.index_c, all_states[all_states.index(bottom_vertex)], ts_system, trace, all_states)
+
+                close(vertex, enabled, f_enabled, open, closed, pt_config, ts_system, all_states, from_ts, i_trace, stateset_list, bottom_vertex)
         else:
             enable = None
             if vertex.operator is pt_opt.Operator.SEQUENCE:
@@ -621,7 +712,8 @@ trace.append('a')
 #trace.append('b')
 #trace.append('c')
 
-tree = pt_util.parse("X('a',->('b','c'))")
+tree = pt_util.parse("X('a','b')")
+#tree = pt_util.parse("X('a',->('b','c'))")
 # tree =  pt_util.parse("->(*('a','d'),'b','c')")
 # tree = pt_util.parse("+('a','b','c')")
 #tree = pt_util.parse("+('a','b')")
