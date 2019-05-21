@@ -13,9 +13,10 @@ TAU = '\u03C4'
 
 class Move(object):
 
-    def __init__(self, log, model, derive = None):
+    def __init__(self, log, model, derive):
         self._log = log
         self._model = model
+        self._derive = derive
         # self._derive = derive
 
     def _set_log(self, log):
@@ -49,10 +50,16 @@ class Move(object):
         return self.__repr__()
 
     def __hash__(self):
-        return hash(self.__repr__())
+        return hash(self.__repr__()) + hash(self._derive)
 
     def __eq__(self, other):
-        return True if str(other) == self.__repr__() else False
+        value = str(other) == self.__repr__()
+
+        for i in range(0, len(self._derive)):
+            if not self._derive[0] == other.derive[0]:
+                value = False
+
+        return value
 
     log = property(_get_log, _set_log)
     model = property(_get_model, _set_model)
@@ -61,6 +68,9 @@ class Move(object):
 
 class PtState(object):
     def __init__(self, log, model, node=None, state_set=None):
+
+        if not (isinstance(node, ts.TransitionSystem.State) or node is None):
+            raise ValueError('Wrong data type')
         self._log = log
         self._model = model
         self._node = node
@@ -81,11 +91,18 @@ class PtState(object):
     def _get_node(self):
         return self._node
 
+    def _set_node(self, node):
+        if not isinstance(node, ts.TransitionSystem.State):
+            ValueError('Wrong Datatype')
+        self._node = node
+
     def _get_state_set(self):
         return self._state_set
 
     def _set_state_set(self, state_set):
         self._state_set = state_set
+
+    # self.node.name.state_set = state_set
 
     def __repr__(self):
         string = "(" + str(self._log) + ", ("
@@ -115,7 +132,7 @@ class PtState(object):
 
     log = property(_get_log, _set_log)
     model = property(_get_model, _set_model)
-    node = property(_get_node)
+    node = property(_get_node, _set_node)
     state_set = property(_get_state_set, _set_state_set)
 
 
@@ -131,8 +148,17 @@ class StateSet(object):
         if isinstance(states, PtState):
 
             self._states.append(states.node)
-            self._node.incoming |= node.incoming
-            self._node.outgoing |= node.outgoing
+            for j in states.node.incoming:
+                j.to_state = self._node
+
+            for j in states.node.outgoing:
+                j.from_state = self._node
+
+            self._node.incoming = self._node.incoming.union(states.node.incoming)
+            self._node.outgoing = self._node.outgoing.union(states.node.outgoing)
+
+            states.node.incoming.clear()
+            states.node.outgoing.clear()
 
         elif isinstance(states, StateSet):
 
@@ -144,6 +170,9 @@ class StateSet(object):
                     j.from_state = self._node
                 self._node.incoming = self._node.incoming.union(i.node.incoming)
                 self._node.outgoing = self._node.outgoing.union(i.node.outgoing)
+                i.incoming.clear()
+                i.outgoing.clear()
+
         else:
             raise ValueError('Wrong state parameter')
 
@@ -170,12 +199,21 @@ class StateSet(object):
             raise ValueError('Should be State')
 
         self._states.append(state)
+
         for i in state.incoming:
             i.to_state = self._node
-        for i in state.outgoing:
-            i.from_state = self._node
+
+        for j in state.outgoing:
+            j.from_state = self._node
+
+        state.incoming.clear()
+        state.outgoing.clear()
+
+
+            
         self._node.incoming = self._node.incoming.union(state.incoming)
         self._node.outgoing = self._node.outgoing.union(state.outgoing)
+
 
     def _get_vertex_id(self):
         return self._vertex_id
@@ -284,6 +322,7 @@ def execute(pt, trace):
         pt_config.append(pt_st.State.CLOSED)
     root = ts.TransitionSystem.State(PtState(0, pt_config))
     ts_system = ts.TransitionSystem('Sync_Net', None, None)
+    root.name.node = root
     ts_system.states.add(root)
     init_state = PtState(0, pt_config, root)
     all_states = list()
@@ -293,7 +332,7 @@ def execute(pt, trace):
     dummy_node = root
     # log moves for init state
     for i in range(0, len(trace)):
-        dummy_node = add_node_syn_net(all_states, ts_system, dummy_node, trace, i, pt_config, None, False)
+        dummy_node = add_node_syn_net(all_states, ts_system, dummy_node, trace, i, pt_config, None, False, None)
 
     execute_enabled(enabled, f_enabled, open, closed, pt_config, ts_system, root, trace, 0, all_states, stateset_list)
     print(enabled)
@@ -315,19 +354,31 @@ def cal_derive(old_config, new_config):
 
 
 def add_node_syn_net(all_states, ts_system, old_node, trace, new_node_i_trace,
-                     new_node_config, new_node_operator, model_move):
+                     new_node_config, new_node_operator, model_move, list_stateset):
     ts_new_node = None
+
+    test = new_node_i_trace
+    if not model_move:
+        test += 1
+
+    if isinstance(old_node.name, PtState):
+        print('-ptstate ', old_node.name, ' - ', PtState(test, new_node_config))
+
+    if isinstance(old_node.name, StateSet):
+        print('-StateSet ', old_node.name, ' - ', PtState(test, new_node_config))
 
     # graph = visual_ts.visualize(ts_system)
     #visual_ts_factory.view(graph)
     # difference between old and new node
     data = dict()
-    # todo implement derive for stateset
+    derive = None
+
+
     if isinstance(old_node.name, PtState):
-        data['derive'] = cal_derive(old_node.name.model, new_node_config)
+        derive = cal_derive(old_node.name.model, new_node_config)
+        data['derive'] = derive
     else:
-        if not isinstance(old_node.name, StateSet):
-            raise ValueError('Should be StateSet')
+
         for i in old_node.name.states:
             data['derive' + str(i)] = cal_derive(i.name.model, new_node_config)
 
@@ -349,29 +400,58 @@ def add_node_syn_net(all_states, ts_system, old_node, trace, new_node_i_trace,
         """
 
         if edge_exists is False:
-
-            # find the to node
+            print('hallo')
+            # find the to node todo new to node can be stateset
             if model_move:
                 ts_new_node = all_states[all_states.index(PtState(new_node_i_trace, new_node_config))].node
             else:
                 ts_new_node = all_states[all_states.index(PtState(new_node_i_trace + 1, new_node_config))].node
 
+            '''
+            if isinstance(old_node.name, StateSet):
+                old_state_trace = None
+                if model_move:
+                    old_state_trace = old_node.name.id + new_node_i_trace
+                else:
+                    old_state_trace = old_node.name.id + new_node_i_trace + 1
+                print('-----asdasdadddd2')
+                for j in list_stateset :
+                    if j.id == old_state_trace:
+                     print('-----asdasdadddd')
+                     old_node = j.node
+            '''
+
+            if isinstance(old_node.name, PtState):
+                if old_node.name.state_set is not None:
+                    print('------jabaasdasd')
+
+
             # model move
             if model_move:
-                ts_util.add_arc_from_to(Move(SKIP, new_node_operator), old_node, ts_new_node, ts_system, data)
+                ts_util.add_arc_from_to(Move(SKIP, new_node_operator, derive), old_node, ts_new_node, ts_system, data)
             # log move
             else:
-                ts_util.add_arc_from_to(Move(trace[new_node_i_trace], SKIP), old_node, ts_new_node, ts_system, data)
+                ts_util.add_arc_from_to(Move(trace[new_node_i_trace], SKIP, derive), old_node, ts_new_node, ts_system,
+                                        data)
 
     else:
         work_pt_config = new_node_config.copy()
         new_state = None
+        if isinstance(old_node.name, PtState):
+            if old_node.name.state_set is not None:
+                print('------jabaasdasd', old_node.name)
         # model move
         if model_move:
             ts_new_node = ts.TransitionSystem.State(PtState(new_node_i_trace, work_pt_config), None, None, None)
             ts_system.states.add(ts_new_node)
+
             new_state = PtState(new_node_i_trace, work_pt_config, ts_new_node)
-            ts_util.add_arc_from_to(Move(SKIP, new_node_operator), old_node, ts_new_node, ts_system, data)
+
+            ts_util.add_arc_from_to(Move(SKIP, new_node_operator, derive), old_node, new_state.node, ts_system, data)
+
+            ts_new_node.name = new_state  # test
+
+            all_states.append(new_state)
 
         elif len(trace) > new_node_i_trace:
             # log move
@@ -379,17 +459,29 @@ def add_node_syn_net(all_states, ts_system, old_node, trace, new_node_i_trace,
             ts_system.states.add(ts_new_node)
             new_state = PtState(new_node_i_trace + 1, work_pt_config, ts_new_node)
 
-            ts_util.add_arc_from_to(Move(trace[new_node_i_trace], SKIP), old_node, ts_new_node, ts_system, data)
-        all_states.append(new_state)
+            ts_util.add_arc_from_to(Move(trace[new_node_i_trace], SKIP, derive), old_node, new_state.node, ts_system,
+                                    data)
+
+            ts_new_node.name = new_state  # 'test'
+            all_states.append(new_state)
+
+
+
 
     # sync move
     if len(trace) > new_node_i_trace and new_node_operator == trace[new_node_i_trace] \
             and new_node_operator is not None and model_move is True:
         ts_new_node_sync = ts.TransitionSystem.State(PtState(new_node_i_trace + 1,
                                                            new_node_config.copy()), None, None, None)
-        all_states.append(PtState(new_node_i_trace + 1, new_node_config.copy(), ts_new_node_sync))
+
+        new_state = PtState(new_node_i_trace + 1, new_node_config.copy(), ts_new_node_sync)
+
+        all_states.append(new_state)
+
+        ts_new_node_sync.name = new_state  # test
+
         ts_system.states.add(ts_new_node_sync)
-        ts_util.add_arc_from_to(Move(trace[new_node_i_trace], new_node_operator),
+        ts_util.add_arc_from_to(Move(trace[new_node_i_trace], new_node_operator, derive),
                                 old_node, ts_new_node_sync, ts_system, data)
 
     return ts_new_node
@@ -428,6 +520,8 @@ def execute_enabled(enabled, f_enabled, open, closed, pt_config, ts_system, from
         work_open.append(vertex)
         work_pt_config[vertex.index_c] = pt_st.State.OPEN
 
+
+
         if PtState(i_trace, work_pt_config) in all_states:
             # check if current node already exists
             # simple connect is like a model move with a already existing new node
@@ -446,8 +540,7 @@ def execute_enabled(enabled, f_enabled, open, closed, pt_config, ts_system, from
                 for i in stateset_list:
                     if i.id == new_from_node.state_set.id:
                         add_node_syn_net(all_states, ts_system, i.node, trace, i.log, work_pt_config,
-                                         vertex.label, True)
-
+                                         vertex.label, True, stateset_list)
 
         else:
             if len(vertex.children) > 0:
@@ -529,16 +622,37 @@ def execute_enabled(enabled, f_enabled, open, closed, pt_config, ts_system, from
             # encountered leaf
             else:
 
-                if isinstance(from_ts.name, StateSet):
-                    print('guenter')
+                '''
+                                added_state = all_states[all_states.index(PtState(i_trace, from_ts.name.model))].node
+                
+                if isinstance(from_ts.name, PtState):
+                    print('guenter', from_ts.name, "list state set", stateset_list )
+                    if added_state.name.state_set is not None:
+                        print('lololololo')
+                    if from_ts.name.state_set is not None:
+                        print('komisch')
+                        if added_state.name.state_set is None:
+                            print('fuck')
+                        if from_ts.name.node.name.state_set is None:
+                            print('komisch')
+                else:
+                    print('guenter state set', from_ts.name)
+                '''
+
+
                     # for i in stateset_list:
                     #    if i.id == from_ts.name.id and i.log == i_trace:
                     #       from_ts = i.node
 
+
                 # model move
+
+                if isinstance(from_ts.name, PtState) and from_ts.name.state_set is not None:
+                    from_ts = from_ts.name.state_set.node
                 old_node = from_ts
+
                 dummy_new_node = add_node_syn_net(all_states, ts_system, from_ts, trace,
-                                                  i_trace,  work_pt_config, vertex.label, True)
+                                                  i_trace, work_pt_config, vertex.label, True, stateset_list)
                 # new node after model move
                 ts_new_node = dummy_new_node
 
@@ -546,22 +660,28 @@ def execute_enabled(enabled, f_enabled, open, closed, pt_config, ts_system, from
                 for i in range(0, len(trace)):
                     # log move
                     dummy_new_node = add_node_syn_net(all_states, ts_system, dummy_new_node,
-                                                      trace, i, work_pt_config, vertex.label, False)
+                                                      trace, i, work_pt_config, vertex.label, False, stateset_list)
                     # getting the log move from node
                     dummy_old_node = None
-                    if isinstance(old_node.name, PtState):
+                    if isinstance(old_node.name, PtState) and old_node.name.state_set is None:
                         dummy_old_node = all_states[all_states.index(PtState(i + 1, old_node.name.model))].node
-                    else:
+                    elif isinstance(old_node.name, StateSet):
                         print(old_node.name)
                         print(stateset_list)
                         for j in stateset_list:
                             if j.id == old_node.name.id and j.log == i + 1:
                                 dummy_old_node = j.node
+                    elif old_node.name.state_set is not None:
+
+                        for j in stateset_list:
+                            if j.id == old_node.name.state_set.id and j.log == i + 1:
+                                dummy_old_node = j.node
+
                     if dummy_old_node is None:
                         raise ValueError('dummy_old_node is not allowed to be None')
                     # connect from the log move from old log move node to the new log move (so an model move)
-                    add_node_syn_net(all_states, ts_system, dummy_old_node, trace, i+1,
-                                     work_pt_config, vertex.label, True)
+                    add_node_syn_net(all_states, ts_system, dummy_old_node, trace, i + 1,
+                                     work_pt_config, vertex.label, True, stateset_list)
 
 
                 close(vertex, work_enabled, work_f_enabled, work_open, work_closed, work_pt_config,
@@ -591,7 +711,8 @@ def execute_enabled(enabled, f_enabled, open, closed, pt_config, ts_system, from
                 else:
                     # transition to end configuration
 
-                    if (len(work_enabled) + len(work_enabled) + len(work_open) + len(work_f_enabled)) == 0:
+                    if (len(work_enabled) + len(work_enabled) + len(work_open) + len(
+                            work_f_enabled)) == 0 and False:  # todo
 
                         if isinstance(ts_new_node.name, PtState) and ts_new_node.name is None:
 
@@ -637,20 +758,27 @@ def fuse_to_StateSet(stateset_list, vertex_id, state, ts_system, trace, all_stat
     for i in stateset_list:
 
         if i.id == vertex_id:
+
             added_state = all_states[all_states.index(PtState(i.log, state.model))]
+
+
             i.add_state(added_state.node)
             found = True
 
             added_state.state_set = i
+
             ts_system.states.remove(added_state.node)
+
     if found is False:
         new_ts_state = ts.TransitionSystem.State(None)
 
         new_state_set = StateSet(state.log, state, new_ts_state, vertex_id)
         stateset_list.append(new_state_set)
 
+        new_ts_state.name = new_state_set
         state.state_set = new_state_set
-        new_state_set.node.name = new_state_set
+
+
         ts_system.states.remove(state.node)
         ts_system.states.add(new_ts_state)
 
@@ -659,10 +787,15 @@ def fuse_to_StateSet(stateset_list, vertex_id, state, ts_system, trace, all_stat
             new_state = all_states[all_states.index(PtState(t, state.model))]
 
             new_state_set = StateSet(new_state.log, new_state, new_ts_state, vertex_id)
+
             stateset_list.append(new_state_set)
-            new_state_set.node.name = new_state_set
+            new_ts_state.name = new_state_set
+
             new_state.state_set = new_state_set
+
+
             ts_system.states.remove(new_state.node)
+            ts_system.states.add(new_ts_state)
 
 
 def close(vertex, enabled, f_enabled, open, closed,pt_config, ts_system, all_states, from_ts, i_trace, stateset_list, bottom_vertex=None):
@@ -805,6 +938,13 @@ tree = pt_util.parse("->( X('a','b'), 'c' ")
 #tree = pt_util.parse("+('a','b')")
 
 ts_system = execute(tree, trace)
+
+for i in ts_system.states:
+    print('+', i)
+
+for i in ts_system.transitions:
+    print('-', i.from_state, ' -- ', i.name, ' --', i.to_state)
+
 
 graph = visual_ts.visualize(ts_system)
 visual_ts_factory.view(graph)
