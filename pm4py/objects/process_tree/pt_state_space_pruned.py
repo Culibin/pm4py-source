@@ -704,7 +704,7 @@ def execute_enabled(enabled, f_enabled, open, closed, pt_config, ts_system, from
                             new_from_node = all_states[all_states.index(PtState(t, ts_new_node.name.model))].node
                             add_node_syn_net(all_states, ts_system, new_from_node, trace, t, c_work_pt_config, TAU,
                                              # vertex label
-                                             True)
+                                             True, stateset_list)
 
 
 
@@ -767,7 +767,8 @@ def fuse_to_StateSet(stateset_list, vertex_id, state, ts_system, trace, all_stat
 
             added_state.state_set = i
 
-            ts_system.states.remove(added_state.node)
+            if added_state.node in ts_system.states:  # todo is das ok ? oder hab fängt das nur einen fall auf den ich nicht abgedeckt hab
+                ts_system.states.remove(added_state.node)
 
     if found is False:
         new_ts_state = ts.TransitionSystem.State(None)
@@ -778,8 +779,8 @@ def fuse_to_StateSet(stateset_list, vertex_id, state, ts_system, trace, all_stat
         new_ts_state.name = new_state_set
         state.state_set = new_state_set
 
-
-        ts_system.states.remove(state.node)
+        if state.node in ts_system.states:
+            ts_system.states.remove(state.node)
         ts_system.states.add(new_ts_state)
 
         for t in range(1, len(trace) + 1):
@@ -793,8 +794,8 @@ def fuse_to_StateSet(stateset_list, vertex_id, state, ts_system, trace, all_stat
 
             new_state.state_set = new_state_set
 
-
-            ts_system.states.remove(new_state.node)
+            if new_state.node in ts_system.states:
+                ts_system.states.remove(new_state.node)
             ts_system.states.add(new_ts_state)
 
 
@@ -927,14 +928,16 @@ trace = list()
 #    trace.append('a')
 trace.append('a')
 #trace.append('b')
-trace.append('c')
+#trace.append('c')
 
 sys.setrecursionlimit(100)
 
 tree = pt_util.parse("->( X('a','b'), 'c' ")
+# tree = pt_util.parse("->( 'c', X('a','b') ")
+#tree = pt_util.parse("->( 'a' , X('b',  X('d','e') ), 'f' ") # fehler
 #tree = pt_util.parse("X('a', ->('b','c'))")
-# tree =  pt_util.parse("->(*('a','d'),'b','c')")
-# tree = pt_util.parse("+('a','b','c')")
+# tree =  pt_util.parse("->(*('a','b', 'c'),'b','c')")
+tree = pt_util.parse("*('a','b','c')")
 #tree = pt_util.parse("+('a','b')")
 
 ts_system = execute(tree, trace)

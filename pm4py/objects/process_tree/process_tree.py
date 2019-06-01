@@ -1,6 +1,6 @@
 class ProcessTree(object):
 
-    def __init__(self, operator=None, parent=None, children=None, label=None, index_c=None):
+    def __init__(self, operator=None, parent=None, children=None, label=None, index_c=None, place=None):
         """
         Constructor
 
@@ -20,6 +20,7 @@ class ProcessTree(object):
         self._children = list() if children is None else children
         self._label = label
         self._index_c = index_c
+        self._place = place
 
     def _set__operator(self, operator):
         self._operator = operator
