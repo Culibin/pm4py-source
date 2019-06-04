@@ -80,6 +80,9 @@ class SbState(object):
     def _get_node(self):
         return self._node
 
+    def _set_node(self, node):
+        self._node = node
+
     def _get_vertex(self):
         return self._vertex
 
@@ -112,7 +115,7 @@ class SbState(object):
 
     log = property(_get_log, _set_log)
     model = property(_get_model, _set_model)
-    node = property(_get_node)
+    node = property(_get_node, _set_node)
 
 
 def execute(pt, trace):
@@ -547,6 +550,7 @@ def should_close(vertex, closed, child, enabled, f_enabled):
         return close
 
 
+'''
 trace = list()
 trace.append('aa')
 trace.append('bb')
@@ -554,3 +558,4 @@ tree = pt_util.parse("->(->('aa','bb'), *('a','b','c'))")  # fehler
 ts_system = execute(tree, trace)
 graph = visual_ts.visualize(ts_system)
 visual_ts_factory.view(graph)
+'''

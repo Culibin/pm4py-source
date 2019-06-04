@@ -11,9 +11,25 @@ TAU = '\u03C4'
 counter = 0
 
 
-def apply_cost_function(ts_system, lm_cost, mm_cost, tau_cost, sync_cost):
+def apply_cost_function_ts_system(ts_system, lm_cost, mm_cost, tau_cost, sync_cost):
 
     for edge in ts_system.transitions:
+        # tau
+        if edge.name.log is TAU or edge.name.model is TAU:
+            edge.data['cost'] = tau_cost
+        # model move
+        elif edge.name.log is SKIP:
+            edge.data['cost'] = mm_cost
+        # log move
+        elif edge.name.model is SKIP:
+            edge.data['cost'] = lm_cost
+        # sync move
+        else:
+            edge.data['cost'] = sync_cost
+
+
+def apply_cost_function_ts_node_outgoing(ts_node, lm_cost, mm_cost, tau_cost, sync_cost):
+    for edge in ts_node.outgoing:
         # tau
         if edge.name.log is TAU or edge.name.model is TAU:
             edge.data['cost'] = tau_cost
@@ -124,6 +140,7 @@ def print_path(node):
     return answer
 
 
+'''
 trace = list()
 # for i in range(0,3):
 #    trace.append('a')
@@ -162,3 +179,4 @@ visual_ts_factory.view(graph)
 
 #book example
 #tree = pt_util.parse("->('As', X( ->(+('Fa', *( ->('SSo', 'Ro'), 'Co')) , X(->('Ao', 'Aan'), ->('Do', 'Da2')))) ,'Da1') ,'Af')")
+'''

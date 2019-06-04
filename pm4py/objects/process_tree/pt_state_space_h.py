@@ -8,8 +8,10 @@ from pm4py.visualization.transition_system import factory as visual_ts_factory
 from pm4py.objects.process_tree.pt_state_space import Move as Move
 from pm4py.objects.process_tree.pt_state_space import SbState as SbState
 from enum import Enum
-from pm4py.objects.process_tree.alignment import apply_cost_function as apply_cost_function
+from pm4py.objects.process_tree.alignment import apply_cost_function_ts_node_outgoing as apply_cost_function
+from pm4py.objects.process_tree import alignment as a_stern
 import random
+from pm4py.objects.process_tree.semantics import populate_closed as populate_closed
 import heapq
 
 SKIP = ">>"
@@ -18,11 +20,38 @@ TAU = '\u03C4'
 # used for heap to help compare tuples
 counter = 0
 
+
 class Action(Enum):
     # open prcess tree
     START = 1
     # close prcess tree
     CLOSE = 2
+
+
+def calculate_h(node):
+    # toDO implement heuristic
+    return 0
+
+
+def update_node_key(heap, node, value):
+    copy_heap = []
+    while len(copy_heap) != 0:
+        if node[0].name == heapq.heappop(heap)[2][0].name:
+            global counter
+            heapq.heappush(copy_heap, (value, counter, node))
+            counter += 1
+        else:
+            heapq.heappush(copy_heap, node)
+    heap = copy_heap
+    return heap
+
+
+def is_node_in_heap(heap, node):
+    copy_heap = heap.copy()
+    while len(copy_heap) != 0:
+        if node == heapq.heappop(copy_heap)[2][0]:
+            return True
+    return False
 
 
 def execute(pt, trace):
@@ -43,29 +72,97 @@ def execute(pt, trace):
         goal_config.append(pt_st.State.CLOSED)
     init_sb_node = SbState(0, init_sb_config, pt)
     init_ts_node = ts.TransitionSystem.State(init_sb_node)
-    init_sb_node.node = init_ts_node
+    init_sb_node._node = init_ts_node
     ts_system.states.add(init_ts_node)
 
-    heapq.heappush(open_list, (0, counter, init_ts_node))
+    enabled, open, closed, f_enabled = set(), set(), set(), set()
+    enabled.add(pt)
+    populate_closed(pt.children, closed)
+
+    config = (init_ts_node, open, enabled, f_enabled, closed, list())
+
+    heapq.heappush(open_list, (0, counter, config))
     counter += 1
     all_states = [init_sb_node]
 
     goal_sb = SbState(len(trace), goal_config, None)
+    trace_i = 0
+
+    init_ts_node.data['g'] = 0
+    init_ts_node.data['h'] = 0
+    init_ts_node.data['f'] = 0
+    init_ts_node.data['predecessor'] = None
 
     while not len(open_list) == 0:
-        current_node = heapq.heappop(open_list)
+        current_node = heapq.heappop(open_list)[2]
 
         # path found
-        if current_node[2] == goal_sb:
+        if current_node[0].name == goal_sb:
+
             return goal_sb
 
-        closed_list.add(current_node[2])
+        closed_list.add(current_node[0].name)
 
         new_list = list()
-        expand_node(current_node[2], open_list, closed_list)
+
+        # expand node
+
+        # 0 = ts node 1 = open, 2 = enabled , 3 = f_enabled, 4 = closed . 5 list_action
+        configs = explore_model(current_node[2], current_node[1], current_node[2], current_node[3], current_node[4]
+                                , new_list, current_node[0], trace, current_node[0].name.log
+                                , ts_system, all_states, current_node[5])
+        # log_config = (explore_log(new_list, current_node[0], all_states, ts_system, trace
+        #                          , current_node[0].name.log, current_node[5])
+        #              ,current_node[1],current_node[2],current_node[3],current_node[4],current_node[5])
+        # configs.append(log_config)
+        print('--counter', counter)
+        print('new list', new_list)
+        print('configs', configs)
+        print('openList', open_list)
+        print('closedList', closed_list)
+
+        # graph = visual_ts.visualize(ts_system)
+        # visual_ts_factory.view(graph)
+
+        # heurisik to the explored nodes
+
+        apply_cost_function(current_node[0], 10, 10, 1, 0)
+
+        for config in configs:
+            edge = None
+            successor = config[0]
+            for incoming in successor.incoming:
+                if incoming.from_state.name == current_node[0].name:
+                    edge = incoming
+
+            if successor.name in closed_list:
+                continue
+
+            new_g = current_node[0].data.get('g') + edge.data.get('cost')
+
+            if is_node_in_heap(open_list, successor.name) and new_g >= successor.data.get('g'):
+                continue
+
+            successor.data['predecessor'] = current_node[0]
+            successor.data['g'] = new_g
+
+            f = new_g + calculate_h(successor)
+
+            if is_node_in_heap(open_list, successor.name):
+                open_list = update_node_key(open_list, config, f)
+            else:
+                heapq.heappush(open_list, (f, counter, config))
+
+            counter += 1
+
+
+
 
     # no Path found
     print('no path found')
+
+    graph = visual_ts.visualize(ts_system)
+    visual_ts_factory.view(graph)
     return 0
 
 
@@ -76,6 +173,7 @@ def add_node_to_ts(all_states, new_list, from_ts_node, new_sb_config, ts_system,
     data = dict()
     data['action'] = list_action.copy
     list_action.clear()
+    list_new_nodes = list()
 
     if new_sb_state in all_states:  # todo can all_states durch closed list ersaetzt werden ?
         sb_state = all_states[all_states.index[new_sb_state]]
@@ -83,11 +181,11 @@ def add_node_to_ts(all_states, new_list, from_ts_node, new_sb_config, ts_system,
     else:
 
         new_ts_node = ts.TransitionSystem.State(new_sb_state)
-        new_sb_state.node = new_ts_node
+        new_sb_state._node = new_ts_node
         ts_system.states.add(new_ts_node)
         ts_util.add_arc_from_to(Move(SKIP, model_label), from_ts_node, new_ts_node, ts_system, data)
 
-        new_list.append(new_sb_state)
+    list_new_nodes.append(new_ts_node)
 
     if len(trace) > trace_i + 1 and model_label == trace[trace_i]:
         new_sb_state = SbState(trace_i + 1, new_sb_config)
@@ -99,23 +197,31 @@ def add_node_to_ts(all_states, new_list, from_ts_node, new_sb_config, ts_system,
 
         else:
             new_ts_node = ts.TransitionSystem.State(new_sb_state)
-            new_sb_state.node = new_ts_node
+            new_sb_state._node = new_ts_node
             ts_system.states.add(new_ts_node)
             ts_util.add_arc_from_to(Move(trace[trace_i], model_label), from_ts_node, new_ts_node, ts_system, data)
 
-            new_list.append(new_sb_state)
+        list_new_nodes.append(new_ts_node)
+
+    return list_new_nodes
 
 
 def states_to_config(open, enabled, f_enabled, closed):
+    #todo ist nicht eindeutig
+
     config = list()
-    for i in open:
-        config.insert(i.index_c, i)
-    for i in enabled:
-        config.insert(i.index_c, i)
-    for i in f_enabled:
-        config.insert(i.index_c, i)
+    print('pre config', open, enabled, f_enabled, closed)
     for i in closed:
-        config.insert(i.index_c, i)
+        config.insert(i.index_c, pt_st.State.CLOSED)
+    for i in enabled:
+        config.insert(i.index_c, pt_st.State.ENABLED)
+    for i in f_enabled:
+        config.insert(i.index_c, pt_st.State.FUTURE_ENABLED)
+
+    for i in open:
+        config.insert(i.index_c, pt_st.State.OPEN)
+
+    print('config', config)
     return config
 
 
@@ -130,7 +236,8 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, new_list, from
         temp_closed = closed.copy()
         temp_fire_enabled = set()
 
-        temp_open.append(vertex)
+        temp_open.add(vertex)
+        temp_enabled.remove(vertex)
 
 
 
@@ -138,7 +245,7 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, new_list, from
 
             v_list_actions = list_actions.copy()
             v_list_actions.extend(list_actions)
-            v_list_actions.append((vertex.index_c, Action.Start))
+            v_list_actions.append((vertex.index_c, Action.START))
 
             # sequence
             if vertex.operator is pt_opt.Operator.SEQUENCE:
@@ -146,9 +253,10 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, new_list, from
                 temp_closed.remove(vertex.children[0])
                 for i in range(1, len(vertex.children)):
                     temp_f_enabled.add(vertex.children[i])
+                    temp_closed.remove(vertex.children[i])
                 temp_fire_enabled.add(vertex.children[0])
 
-                configs.append(
+                configs.extend(
                     explore_model(temp_fire_enabled, temp_open, temp_enabled, temp_f_enabled, temp_closed, new_list,
                                   from_ts_node, trace, trace_i
                                   , ts_system, all_states, v_list_actions))
@@ -164,7 +272,7 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, new_list, from
 
                     temp_fire_enabled.add(child)
 
-                    configs.append(
+                    configs.extend(
                         explore_model(temp_fire_enabled, temp_open, temp_enabled, temp_f_enabled, temp_closed, new_list,
                                       from_ts_node, trace, trace_i
                                       , ts_system, all_states, v_list_actions))
@@ -177,7 +285,7 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, new_list, from
                     temp_closed.remove(child)
                     temp_fire_enabled.add(child)
 
-                configs.append(
+                configs.extend(
                     explore_model(temp_fire_enabled, temp_open, temp_enabled, temp_f_enabled, temp_closed, new_list,
                                   from_ts_node, trace, trace_i
                                   , ts_system, all_states, v_list_actions))
@@ -194,7 +302,7 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, new_list, from
 
                 temp_fire_enabled.add(vertex.children[0])
 
-                configs.append(
+                configs.extend(
                     explore_model(temp_fire_enabled, temp_open, temp_enabled, temp_f_enabled, temp_closed, new_list,
                                   from_ts_node, trace, trace_i
                                   , ts_system, all_states, v_list_actions))
@@ -202,39 +310,42 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, new_list, from
         else:
             new_sb_config = states_to_config(temp_open, temp_enabled, temp_f_enabled, temp_closed)
 
-            add_node_to_ts(all_states, new_list, from_ts_node, new_sb_config, ts_system, vertex.label, trace,
-                           trace_i, list_actions)
+            new_ts_nodes = add_node_to_ts(all_states, new_list, from_ts_node, new_sb_config, ts_system, vertex.label,
+                                          trace,
+                                          trace_i, list_actions)
 
-            close(vertex, temp_enabled, temp_open, temp_closed, list_actions)
+            close(vertex, temp_enabled, temp_open, temp_closed, temp_f_enabled, list_actions)
 
-            configs.append((temp_open, temp_enabled, temp_enabled, temp_closed, list_actions))
+            for new_ts_node in new_ts_nodes:
+                configs.append((new_ts_node, temp_open, temp_enabled, temp_f_enabled, temp_closed, list_actions))
 
             # todo add CCCC as closing node (espacially to add the close action to this node)
 
     return configs
 
 
-def close(vertex, enabled, open, closed, list_actions):
+def close(vertex, enabled, open, closed, f_enabled, list_actions):
 
     if vertex.operator is not None:
         list_actions.append((vertex.index_c, Action.CLOSE))
     open.remove(vertex)
     closed.add(vertex)
-    process_closed(vertex, enabled, open, closed)
+    process_closed(vertex, enabled, open, closed, f_enabled, list_actions)
 
 
-def process_closed(closed_node, enabled, open, closed):
+def process_closed(closed_node, enabled, open, closed, f_enabled, list_actions):
     # todo wie speichere ich den node wohin die transition beim redo hingeht oder auch nicht ?
     # todo alternative einfach 1 kind auf enabled. kanten werden nur noch mal gezogen und heurisik vehindert
     # todo endlosschliefe
     vertex = closed_node.parent
     if vertex is not None and vertex in open:
         if should_close(vertex, closed, closed_node):
-            close(vertex, enabled, open, closed)
+            close(vertex, enabled, open, closed, f_enabled, list_actions)
         else:
             enable = None
             if vertex.operator is pt_opt.Operator.SEQUENCE:
-                enable = vertex.children[vertex.children.index(closed_node) + 1]  # zwischen
+                enable = vertex.children[vertex.children.index(closed_node) + 1]
+                f_enabled.remove(vertex.children[vertex.children.index(closed_node) + 1])
             elif vertex.operator is pt_opt.Operator.LOOP:
                 if vertex.children.index(closed_node) == 0:
                     enable = vertex.children[1]
@@ -254,20 +365,28 @@ def should_close(vertex, closed, child):
         return set(vertex.children) <= closed
 
 
-def explore_log(pt, new_list, from_ts_node, all_states, ts_system, trace, trace_i, list_action):
+def explore_log(new_list, from_ts_node, all_states, ts_system, trace, trace_i, list_action):
     sb_new_node = SbState(trace_i + 1, from_ts_node.name.model)
     data = dict()
     data['action'] = list_action.copy
 
     if len(trace) != trace_i:
         if sb_new_node in all_states:
-            sb_state = all_states[all_states.index[sb_new_node]]
-            ts_util.add_arc_from_to(Move(trace[trace_i], SKIP), from_ts_node, sb_state, ts_system, data)
+            ts_new_node = all_states[all_states.index[sb_new_node]].node
+            ts_util.add_arc_from_to(Move(trace[trace_i], SKIP), from_ts_node, ts_new_node, ts_system, data)
         else:
             ts_new_node = ts.TransitionSystem.State(sb_new_node)
             sb_new_node.node = ts_new_node
             ts_util.add_arc_from_to(Move(trace[trace_i], SKIP), from_ts_node, ts_new_node, ts_system, data)
 
-            new_list.append(sb_new_node)
+            new_list.append(ts_new_node)
 
-    return None
+    return sb_new_node
+
+
+trace = list()
+trace.append('a')
+trace.append('b')
+trace.append('c')
+tree = pt_util.parse("->('a','b', 'c')")
+execute(tree, trace)
