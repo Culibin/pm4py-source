@@ -31,13 +31,13 @@ def apply_cost_function_ts_system(ts_system, lm_cost, mm_cost, tau_cost, sync_co
 def apply_cost_function_ts_node_outgoing(ts_node, lm_cost, mm_cost, tau_cost, sync_cost):
     for edge in ts_node.outgoing:
         # tau
-        if edge.name.log is TAU or edge.name.model is TAU:
+        if edge.name.log == TAU or edge.name.model == TAU:
             edge.data['cost'] = tau_cost
         # model move
-        elif edge.name.log is SKIP:
+        elif edge.name.log == SKIP:
             edge.data['cost'] = mm_cost
         # log move
-        elif edge.name.model is SKIP:
+        elif edge.name.model == SKIP:
             edge.data['cost'] = lm_cost
         # sync move
         else:
