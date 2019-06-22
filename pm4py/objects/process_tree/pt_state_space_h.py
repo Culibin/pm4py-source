@@ -135,7 +135,7 @@ def execute(pt, trace):
 
         # heurisik to the explored nodes
 
-        apply_cost_function(current_node[0], 10, 10, 2, 1)
+        apply_cost_function(current_node[0], 1, 1, 1, 1)
 
         for config in configs:
             edge = None
@@ -163,7 +163,7 @@ def execute(pt, trace):
                 heapq.heappush(open_list, (f, counter, config))
 
             counter += 1
-
+        print('post openList', open_list)
 
 
 
@@ -325,13 +325,25 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, new_list, from
 
                 temp_enabled.add(vertex.children[0])
                 temp_closed.remove(vertex.children[0])
-
                 temp_fire_enabled.add(vertex.children[0])
 
                 configs.extend(
                     explore_model(temp_fire_enabled, temp_open, temp_enabled, temp_f_enabled, temp_closed, new_list,
                                   from_ts_node, trace, trace_i
                                   , ts_system, all_states, v_list_actions))
+
+                temp_f_enabled.add(vertex.children[1])
+                temp_closed.remove(vertex.children[1])
+
+                configs.extend(
+                    explore_model(temp_fire_enabled, temp_open, temp_enabled, temp_f_enabled, temp_closed, new_list,
+                                  from_ts_node, trace, trace_i
+                                  , ts_system, all_states, v_list_actions))
+
+                loop_list = list()
+                for config in configs:
+                    loop_list.append(config[0])
+                vertex.data['loop_i'] = (vertex.index_c, loop_list, configs[0][6])
 
         else:
 
@@ -341,10 +353,19 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, new_list, from
                                           trace,
                                           trace_i, list_actions)
 
-            close(vertex, temp_enabled, temp_open, temp_closed, temp_f_enabled, list_actions)
+            loop_nodes = close(vertex, temp_enabled, temp_open, temp_closed, temp_f_enabled, list_actions)
 
             for ts_node in new_ts_nodes:
-                configs.append((ts_node, temp_open, temp_enabled, temp_f_enabled, temp_closed, list_actions))
+
+                if loop_nodes is not None:
+                    for i in loop_nodes[1]:
+                        # todo meh
+                        add_node_to_ts(all_states, new_list, ts_node, i.name.model, ts_system, loop_nodes[2],
+                                       trace, i.name.log, list_actions)
+
+                configs.append(
+                    (ts_node, temp_open, temp_enabled, temp_f_enabled, temp_closed, list_actions, vertex.label))
+
 
             # todo add CCCC as closing node (espacially to add the close action to this node)
 
@@ -375,7 +396,7 @@ def close(vertex, enabled, open, closed, f_enabled, list_actions):
         list_actions.append((vertex.index_c, Action.CLOSE))
     open.remove(vertex)
     closed.add(vertex)
-    process_closed(vertex, enabled, open, closed, f_enabled, list_actions)
+    return process_closed(vertex, enabled, open, closed, f_enabled, list_actions)
 
 
 def process_closed(closed_node, enabled, open, closed, f_enabled, list_actions):
@@ -385,7 +406,7 @@ def process_closed(closed_node, enabled, open, closed, f_enabled, list_actions):
     vertex = closed_node.parent
     if vertex is not None and vertex in open:
         if should_close(vertex, closed, closed_node):
-            close(vertex, enabled, open, closed, f_enabled, list_actions)
+            return close(vertex, enabled, open, closed, f_enabled, list_actions)
         else:
             enable = None
             if vertex.operator is pt_opt.Operator.SEQUENCE:
@@ -393,10 +414,19 @@ def process_closed(closed_node, enabled, open, closed, f_enabled, list_actions):
                 f_enabled.remove(vertex.children[vertex.children.index(closed_node) + 1])
             elif vertex.operator is pt_opt.Operator.LOOP:
                 if vertex.children.index(closed_node) == 0:
-                    enable = vertex.children[1]
-                    enable.add(vertex.children[2])
+
+                    if vertex.children[1] in f_enabled:
+                        enable = vertex.children[1]
+                        f_enabled.remove(vertex.children[1])
+                    else:
+                        enable = vertex.children[2]
+                        closed.remove(vertex.children[2])
+
+                elif vertex.children.index(closed_node) == 1:
+                    return vertex.data['loop_i']
+
                 else:
-                    enable = vertex.children[0]
+                    print('wtf')
             if enable is not None:
                 enabled.add(enable)
 
@@ -415,7 +445,6 @@ def explore_log(new_list, from_ts_node, all_states, ts_system, trace, trace_i, l
     data = dict()
     data['action'] = list_action.copy
     list_action.clear()
-
 
     if len(trace) != trace_i:
         if sb_new_node in all_states:
@@ -457,20 +486,8 @@ def print_path(node):
 
 
 trace = list()
-trace.append('a')
-trace.append('c')
-tree = pt_util.parse("X('a','b')")
+# trace.append('a')
+# trace.append('b')
+# trace.append('c')
+tree = pt_util.parse("*('a','b','c')")
 execute(tree, trace)
-
-'''
-cannot find path:
-trace.append('a')
-trace.append('b')
-trace.append('c')
-tree = pt_util.parse("X('a','b')")
-
-wrong solution
-trace.append('a')
-trace.append('c')
-tree = pt_util.parse("X('a','b')")
-'''

@@ -1,6 +1,6 @@
 class ProcessTree(object):
 
-    def __init__(self, operator=None, parent=None, children=None, label=None, index_c=None, place=None):
+    def __init__(self, operator=None, parent=None, children=None, label=None, index_c=None, place=None, data=None):
         """
         Constructor
 
@@ -21,6 +21,7 @@ class ProcessTree(object):
         self._label = label
         self._index_c = index_c
         self._place = place
+        self._data = dict() if data is None else data
 
     def _set__operator(self, operator):
         self._operator = operator
@@ -33,6 +34,9 @@ class ProcessTree(object):
 
     def _set_index_c(self, index_c):
         self._index_c = index_c
+
+    def _set_data(self, data):
+        self._data = data
 
     def _get_index_c(self):
         return self._index_c
@@ -48,6 +52,9 @@ class ProcessTree(object):
 
     def _get_label(self):
         return self._label
+
+    def _get_data(self):
+        return self._data
 
     def __repr__(self):
         """
@@ -85,6 +92,7 @@ class ProcessTree(object):
     operator = property(_get_operator)
     label = property(_get_label, _set_label)
     index_c = property(_get_index_c)
+    data = property(_get_data, _set_data)
 
     def count_nodes(self):
 
