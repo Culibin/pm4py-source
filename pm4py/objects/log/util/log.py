@@ -93,6 +93,12 @@ def project_traces(event_log, keys=xes_util.DEFAULT_NAME_KEY):
         return list(map(lambda t: list(map(lambda e: {key: e[key] for key in keys}, t)), event_log))
 
 
+def trace_to_list(trace, keys=xes_util.DEFAULT_NAME_KEY):
+    result = list()
+    for i in trace:
+        result.append(i[keys])
+    return result
+
 def derive_and_lift_trace_attributes_from_event_attributes(trlog, ignore=None, retain_on_event_level=False,
                                                            verbose=False):
     if ignore is None:

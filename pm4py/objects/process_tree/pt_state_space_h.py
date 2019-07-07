@@ -1,17 +1,28 @@
+import heapq
+from enum import Enum
+
+from pm4py.algo.conformance.alignments import utils as align_utils
+from pm4py.algo.conformance.alignments.versions import state_equation_a_star  as a_star
+from pm4py.objects.conversion.process_tree.versions import to_petri_net as conversion
+from pm4py.objects.log.importer.xes import factory as xes_importer
+from pm4py.objects.log.util.xes import DEFAULT_NAME_KEY
+from pm4py.objects.petri import incidence_matrix as inicence_m
+from pm4py.objects.petri import petrinet as petrinet
+from pm4py.objects.petri import synchronous_product as sync_p
+from pm4py.objects.petri import utils as pnet_util
 from pm4py.objects.process_tree import pt_operator as pt_opt
 from pm4py.objects.process_tree import state as pt_st
-from pm4py.objects.transition_system import transition_system as ts
-from pm4py.objects.transition_system import utils as ts_util
 from pm4py.objects.process_tree import util as pt_util
-from pm4py.visualization.transition_system.util import visualize_graphviz as visual_ts
-from pm4py.visualization.transition_system import factory as visual_ts_factory
+from pm4py.objects.process_tree.alignment import apply_cost_function_ts_node_outgoing as apply_cost_function
 from pm4py.objects.process_tree.pt_state_space import Move as Move
 from pm4py.objects.process_tree.pt_state_space import SbState as SbState
-from enum import Enum
-from pm4py.objects.process_tree.alignment import apply_cost_function_ts_node_outgoing as apply_cost_function
-from pm4py.objects.process_tree import alignment as a_stern
 from pm4py.objects.process_tree.semantics import populate_closed as populate_closed
-import heapq
+from pm4py.objects.transition_system import transition_system as ts
+from pm4py.objects.transition_system import utils as ts_util
+from pm4py.visualization.transition_system import factory as visual_ts_factory
+from pm4py.visualization.transition_system.util import visualize_graphviz as visual_ts
+from pm4py.visualization.petrinet import factory as vi_petri
+from pm4py.visualization.petrinet.common import visualize as vi_petri2
 
 SKIP = ">>"
 TAU = '\u03C4'
@@ -27,9 +38,41 @@ class Action(Enum):
     CLOSE = 2
 
 
-def calculate_h(node):
-    # toDO implement heuristic
-    return 0
+def create_place_tree_list(self, subtree_marking):
+    if self.operator is None:
+        # print(self.place.name,self.label)
+        subtree_marking.append((self.place, self))
+    else:
+        # print(self.place.name, self.operator)
+        subtree_marking.append((self.place, self))
+
+    for i in range(0, len(self._children)):
+        child = self._children[i]
+        create_place_tree_list(child, subtree_marking)
+
+
+def calculate_h(tree, subtree, i_trace, n, i, f, v, t, imatrx):  # (tree, trace, subtree, i_trace):
+
+    complete_marking = petrinet.Marking()
+
+    complete_marking[t[i_trace]] = 1
+    print('vertex', subtree, ':', subtree.name.vertex)
+
+    for k in v:
+        if str(k[1]) == str(subtree.name.vertex):
+            complete_marking[k[0]] = 1
+
+    print("complete", complete_marking)
+    # gviz = vi_petri.apply(n, complete_marking, f)
+    # gviz = vi_petri2.graphviz_visualization(n, debug=True)
+    # vi_petri.view(gviz)
+
+    cost_function = align_utils.construct_standard_cost_function(n, ">>")
+
+    ini_vec, fin_vec, cost_vec = a_star.__vectorize_initial_final_cost(imatrx, complete_marking, f, cost_function)
+    h, x = a_star.__compute_exact_heuristic(n, imatrx, complete_marking, cost_vec, fin_vec)
+    print('heuristic ', h)
+    return h
 
 
 def update_node_key(heap, node, value):
@@ -69,7 +112,7 @@ def execute(pt, trace):
     for i in range(1, i_nodes):  # set list to start configuration
         init_sb_config.append(pt_st.State.CLOSED)
         goal_config.append(pt_st.State.CLOSED)
-    init_sb_node = SbState(0, init_sb_config, pt)
+    init_sb_node = SbState(0, init_sb_config, pt, vertex=pt)
     init_ts_node = ts.TransitionSystem.State(init_sb_node)
     init_sb_node._node = init_ts_node
     ts_system.states.add(init_ts_node)
@@ -93,6 +136,23 @@ def execute(pt, trace):
     init_ts_node.data['predecessor'] = None
 
     all_loop_nodes = list()
+
+    activity_key = DEFAULT_NAME_KEY
+    log = xes_importer.import_log("/Users/Ralf/PycharmProjects/pm4py-source/tests/input_data/abc.xes")
+    net1, init1, final1, trace_place_list = pnet_util.construct_trace_net_marking(log[0], activity_key=activity_key)
+    net, init, final = conversion.apply(tree)
+
+    dummy_marking = petrinet.Marking()
+    marking_vector_tree = list()
+    create_place_tree_list(tree, marking_vector_tree)
+
+    net, i_marking, f_marking, pt_marking_list, trace_marking_list = sync_p.construct_place_aware(net, dummy_marking,
+                                                                                                  final, net1,
+                                                                                                  dummy_marking, final1,
+                                                                                                  ">>",
+                                                                                                  marking_vector_tree,
+                                                                                                  trace_place_list)
+    imatrx = inicence_m.construct(net)
 
     while not len(open_list) == 0:
 
@@ -135,7 +195,7 @@ def execute(pt, trace):
         # graph = visual_ts.visualize(ts_system)
         # visual_ts_factory.view(graph)
 
-        # heurisik to the explored nodes
+        # heurisic to the explored nodes
 
         apply_cost_function(current_node[0], 10, 10, 1, 0)
 
@@ -145,6 +205,7 @@ def execute(pt, trace):
                 configs.append(l[1])
 
         for config in configs:
+            print(configs)
             print('*configs', config)
             edge = None
             successor = config[0]
@@ -160,13 +221,17 @@ def execute(pt, trace):
 
             new_g = current_node[0].data.get('g') + edge.data.get('cost')
 
+
             if is_node_in_heap(open_list, successor.name) and new_g >= successor.data.get('g'):
                 continue
 
             successor.data['predecessor'] = current_node[0]
             successor.data['g'] = new_g
 
-            f = new_g + calculate_h(successor)
+            print('succ', current_node[0], '-->', successor)
+            f = new_g + calculate_h(pt, successor, successor.name.log, net, i_marking,
+                                    f_marking, pt_marking_list, trace_marking_list, imatrx)  # calculate_h(successor)
+            print('heurisik', f, new_g, successor.name)
 
             if is_node_in_heap(open_list, successor.name):
                 open_list = update_node_key(open_list, config, f)
@@ -184,9 +249,9 @@ def execute(pt, trace):
 
 
 def add_node_to_ts(all_states, new_list, from_ts_node, new_sb_config, ts_system, model_label, trace, trace_i,
-                   list_action):
+                   list_action, vertex):
     # todo: actions in die kanten ? besonders in hinblick auf loop redo kante zu alten knoten
-    new_sb_state = SbState(trace_i, new_sb_config)
+    new_sb_state = SbState(trace_i, new_sb_config, vertex=vertex)
     data = dict()
     data['action'] = list_action.copy
     list_action.clear()
@@ -208,7 +273,7 @@ def add_node_to_ts(all_states, new_list, from_ts_node, new_sb_config, ts_system,
     if len(trace) > trace_i and model_label == trace[trace_i]:
         data = dict()
         data['action'] = list_action.copy
-        new_sb_state = SbState(trace_i + 1, new_sb_config)
+        new_sb_state = SbState(trace_i + 1, new_sb_config, vertex=vertex)
 
         if new_sb_state in all_states:
 
@@ -359,7 +424,7 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, loop_config_li
             new_sb_config = states_to_config(temp_open, temp_enabled, temp_f_enabled, temp_closed)
 
             new_ts_nodes = add_node_to_ts(all_states, loop_config_list, from_ts_node, new_sb_config,
-                                          ts_system, vertex.label, trace, trace_i, list_actions)
+                                          ts_system, vertex.label, trace, trace_i, list_actions, vertex)
 
             loop_nodes = close(vertex, temp_enabled, temp_open, temp_closed, temp_f_enabled, list_actions)
 
@@ -449,7 +514,7 @@ def should_close(vertex, closed, child):
 
 
 def explore_log(new_list, from_ts_node, all_states, ts_system, trace, trace_i, list_action):
-    sb_new_node = SbState(trace_i + 1, from_ts_node.name.model)
+    sb_new_node = SbState(trace_i + 1, from_ts_node.name.model, vertex=from_ts_node.name.vertex)
     data = dict()
     data['action'] = list_action.copy
     list_action.clear()
@@ -492,6 +557,14 @@ def print_path(node):
     print(answer)
     return answer
 
+
+try:
+    import faulthandler
+
+    faulthandler.enable()
+    print('Faulthandler enabled')
+except Exception:
+    print('Could not enable faulthandler')
 
 trace = list()
 trace.append('a')

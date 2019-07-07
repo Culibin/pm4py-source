@@ -59,11 +59,12 @@ class Move(object):
 
 
 class SbState(object):
-    def __init__(self, log, model, node=None, place=None):
+    def __init__(self, log, model, node=None, place=None, vertex=None):
         self._log = log
         self._model = model
         self._node = node
         self._place = place
+        self._vertex = vertex
 
     def _set_log(self, log):
         self._log = log
@@ -80,11 +81,11 @@ class SbState(object):
     def _get_node(self):
         return self._node
 
-    def _set_node(self, node):
-        self._node = node
-
     def _get_vertex(self):
         return self._vertex
+
+    def _set_node(self, node):
+        self._node = node
 
     def _set_vertex(self, vertex):
         self._vertex = vertex
@@ -116,6 +117,7 @@ class SbState(object):
     log = property(_get_log, _set_log)
     model = property(_get_model, _set_model)
     node = property(_get_node, _set_node)
+    vertex = property(_get_vertex, _set_vertex)
 
 
 def execute(pt, trace):
