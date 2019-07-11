@@ -38,29 +38,71 @@ class Action(Enum):
     CLOSE = 2
 
 
-def create_place_tree_list(self, subtree_marking):
-    if self.operator is None:
-        # print(self.place.name,self.label)
-        subtree_marking.append((self.place, self))
-    else:
-        # print(self.place.name, self.operator)
-        subtree_marking.append((self.place, self))
+def create_place_tree_list(subtree, subtree_marking):
+    subtree_marking.append((subtree.data['start_place'], subtree.data['final_place'], subtree))
 
-    for i in range(0, len(self._children)):
-        child = self._children[i]
+    for i in range(0, len(subtree._children)):
+        child = subtree._children[i]
         create_place_tree_list(child, subtree_marking)
 
 
-def calculate_h(tree, subtree, i_trace, n, i, f, v, t, imatrx):  # (tree, trace, subtree, i_trace):
+def get_parallel_parents(subtree, parallel_list):
+    if subtree.operator == pt_opt.Operator.PARALLEL:
+        parallel_list.append(subtree)
+    if subtree.parent is not None:
+        get_parallel_parents(subtree.parent, parallel_list)
+    else:
+        return parallel_list
+
+
+def get_closed_children(tree_list, closed_list, closed_children):
+    for tree in tree_list:
+        for child in tree.children:
+            if child in closed_list:
+                closed_children.append(child)
+
+
+def calculate_h(tree, enabled, i_trace, n, i, f, v, t, imatrx, tree_final_marking,
+                closed):  # (tree, trace, subtree, i_trace):
 
     complete_marking = petrinet.Marking()
+    complete_marking[t[i_trace][0]] = 1
+    # print('vertex', subtree, ':', subtree.name.vertex)
+    print('§§enabled', enabled)
+    # print('-§§enabled', v)
+    '''
+    if len(enabled[1]) > 0:
+        for k in v[1]:
+            if k[1] in enabled[1]:
+                complete_marking[k[0]] = 1
+    else:
+        for k in v[1]:
+            if k[1] == enabled[1]:
+                complete_marking[k[0]] = 1
 
-    complete_marking[t[i_trace]] = 1
-    print('vertex', subtree, ':', subtree.name.vertex)
-
-    for k in v:
-        if str(k[1]) == str(subtree.name.vertex):
+    for k in v[0]:
+        if k[1] in enabled[0].difference(enabled[1]):
             complete_marking[k[0]] = 1
+    '''
+    if len(enabled[1]) > 0:
+        for i in enabled[1]:
+            complete_marking[i.data['start_place']] = 1
+
+            parallel_parent = list()
+            closed_children = list()
+            get_parallel_parents(i, parallel_parent)
+            get_closed_children(parallel_parent, closed, closed_children)
+            for child in closed_children:
+                complete_marking[child.data['final_place']] = 1
+
+
+    # for i in enabled[0].difference(enabled[1]):
+    # complete_marking[i.data['final_place']] = 1
+    else:
+        complete_marking[tree.data['final_place']] = 1
+
+    #    print('test', tree_final_marking)
+    #   complete_marking[tree_final_marking] = 1
 
     print("complete", complete_marking)
     # gviz = vi_petri.apply(n, complete_marking, f)
@@ -112,7 +154,7 @@ def execute(pt, trace):
     for i in range(1, i_nodes):  # set list to start configuration
         init_sb_config.append(pt_st.State.CLOSED)
         goal_config.append(pt_st.State.CLOSED)
-    init_sb_node = SbState(0, init_sb_config, pt, vertex=pt)
+    init_sb_node = SbState(0, init_sb_config, pt, vertex=({pt}, {pt}))
     init_ts_node = ts.TransitionSystem.State(init_sb_node)
     init_sb_node._node = init_ts_node
     ts_system.states.add(init_ts_node)
@@ -138,13 +180,14 @@ def execute(pt, trace):
     all_loop_nodes = list()
 
     activity_key = DEFAULT_NAME_KEY
-    log = xes_importer.import_log("/Users/Ralf/PycharmProjects/pm4py-source/tests/input_data/abc.xes")
+    log = xes_importer.import_log("/Users/Ralf/PycharmProjects/pm4py-source/tests/input_data/abac.xes")
     net1, init1, final1, trace_place_list = pnet_util.construct_trace_net_marking(log[0], activity_key=activity_key)
     net, init, final = conversion.apply(tree)
 
     dummy_marking = petrinet.Marking()
     marking_vector_tree = list()
     create_place_tree_list(tree, marking_vector_tree)
+    #marking_vector_tree.append((set(), final))
 
     net, i_marking, f_marking, pt_marking_list, trace_marking_list = sync_p.construct_place_aware(net, dummy_marking,
                                                                                                   final, net1,
@@ -152,12 +195,14 @@ def execute(pt, trace):
                                                                                                   ">>",
                                                                                                   marking_vector_tree,
                                                                                                   trace_place_list)
+    gviz = vi_petri2.graphviz_visualization(net, debug=True)
+    vi_petri.view(gviz)
     imatrx = inicence_m.construct(net)
 
     while not len(open_list) == 0:
 
         current_node = heapq.heappop(open_list)[2]
-        print('-s-current', current_node[0])
+        print('-s-current', current_node[0], '              -|-', current_node)
         print('pre openlist', open_list)
         # path found
         if 'end' in current_node[0].data and current_node[0].data['end'] is True:
@@ -174,10 +219,19 @@ def execute(pt, trace):
 
         # expand node
 
+        # graph = visual_ts.visualize(ts_system)
+        #visual_ts_factory.view(graph)
+
+
         # 0 = ts_node 1 = open, 2 = enabled , 3 = f_enabled, 4 = closed . 5 list_action
         configs = explore_model(current_node[2], current_node[1], current_node[2], current_node[3], current_node[4]
                                 , loop_list, current_node[0], trace, current_node[0].name.log
                                 , ts_system, all_states, current_node[5])
+
+        for i in all_loop_nodes:
+            if i[0] == current_node[0]:
+                configs.append(i[1])
+                all_loop_nodes.remove(i)
 
         all_loop_nodes.extend(loop_list)
 
@@ -220,8 +274,6 @@ def execute(pt, trace):
                 print('// edge is none')
 
             new_g = current_node[0].data.get('g') + edge.data.get('cost')
-
-
             if is_node_in_heap(open_list, successor.name) and new_g >= successor.data.get('g'):
                 continue
 
@@ -229,8 +281,9 @@ def execute(pt, trace):
             successor.data['g'] = new_g
 
             print('succ', current_node[0], '-->', successor)
-            f = new_g + calculate_h(pt, successor, successor.name.log, net, i_marking,
-                                    f_marking, pt_marking_list, trace_marking_list, imatrx)  # calculate_h(successor)
+            f = new_g + calculate_h(pt, successor.name.vertex, successor.name.log, net, i_marking, f_marking,
+                                    pt_marking_list, trace_marking_list, imatrx, final,
+                                    config[4])  # calculate_h(successor)
             print('heurisik', f, new_g, successor.name)
 
             if is_node_in_heap(open_list, successor.name):
@@ -407,9 +460,11 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, loop_config_li
                                   loop_config_list, from_ts_node, trace, trace_i,
                                   ts_system, all_states, v_list_actions))
 
+                # saves for the loop subtree the possible configs
                 loop_list = list()
                 for config in configs:
                     add = True
+                    # no doubles
                     for i in loop_list:
                         if i[0].name.model == config[0].name.model:
                             add = False
@@ -417,29 +472,45 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, loop_config_li
                         loop_list.append(config)
                 if len(loop_list) != 0:  # todo kann as seiN ?
 
+                    # configs[0][6] is the label
                     vertex.data['loop_i'] = (vertex.index_c, loop_list, configs[0][6])
+                else:
+                    ValueError("loop_list != 0")
 
         else:
+
+            # print('+++++enabled', enabled)
+            #print('+tempenabled', temp_enabled)
 
             new_sb_config = states_to_config(temp_open, temp_enabled, temp_f_enabled, temp_closed)
 
             new_ts_nodes = add_node_to_ts(all_states, loop_config_list, from_ts_node, new_sb_config,
-                                          ts_system, vertex.label, trace, trace_i, list_actions, vertex)
+                                          ts_system, vertex.label, trace, trace_i,
+                                          list_actions, (enabled, temp_enabled))
+
+            # print('-+++++nodes', new_ts_nodes)
+
+            #preclose_enabled = temp_enabled.copy()
+
 
             loop_nodes = close(vertex, temp_enabled, temp_open, temp_closed, temp_f_enabled, list_actions)
-
             for ts_node in new_ts_nodes:
 
+                '''
                 if loop_nodes is not None:
                     for i in loop_nodes[1]:
 
                         loop_ts_nodes = add_node_to_ts(all_states, loop_config_list, ts_node, i[0].name.model,
-                                                       ts_system, loop_nodes[2], trace, ts_node.name.log, list_actions)
-
+                                                       ts_system, loop_nodes[2], trace, ts_node.name.log,
+                                                       list_actions, (enabled, temp_enabled))
+                        print('temp-enabled2', temp_enabled)
                         for lp_node in loop_ts_nodes:
+                            # todo enbed preclose enabled here in this config
+                            print('-/-/- loop test', ts_node, (lp_node, i[1], i[2], i[3], i[4], list_actions, loop_nodes[2]))
                             loop_config_list.append(
                                 (ts_node, (lp_node, i[1], i[2], i[3], i[4], list_actions,
                                            loop_nodes[2])))
+                '''
 
                 configs.append(
                     (ts_node, temp_open, temp_enabled, temp_f_enabled, temp_closed, list_actions, vertex.label))
@@ -496,6 +567,8 @@ def process_closed(closed_node, enabled, open, closed, f_enabled, list_actions):
                         closed.remove(vertex.children[2])
 
                 elif vertex.children.index(closed_node) == 1:
+                    enabled.add(vertex.children[0])
+                    closed.remove(vertex.children[0])
                     return vertex.data['loop_i']
 
                 else:
@@ -569,6 +642,8 @@ except Exception:
 trace = list()
 trace.append('a')
 trace.append('b')
+trace.append('a')
 trace.append('c')
-tree = pt_util.parse("->('a','b','c')")
+
+tree = pt_util.parse("*('a','b','c')")
 execute(tree, trace)

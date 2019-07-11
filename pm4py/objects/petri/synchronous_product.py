@@ -192,23 +192,48 @@ def __copy_into_place_aware(source_net, target_net, upper, skip, marking_vector)
         t_map[t] = petri.petrinet.PetriNet.Transition(name, label)
         target_net.transitions.add(t_map[t])
 
-    new_marking_vector = list()
+    if upper:
+        new_marking_vector = [list(), list()]
+    else:
+        new_marking_vector = list()
+
     for p in source_net.places:
         name = (p.name, skip) if upper else (skip, p.name)
         p_map[p] = petri.petrinet.PetriNet.Place(name)
         target_net.places.add(p_map[p])
 
         if upper:
+            # TODO FÜGE HIER (PLACE, SET() EIN
+            assigned = False
             for m in marking_vector:
                 if p.name == m[0].name:
-                    new_marking_vector.append((p_map[p], m[1]))
+                    assigned = True
+                    m[2].data['start_place'] = p_map[p]
+
+                    new_marking_vector[0].append((p_map[p], m[2]))
+
+                elif p.name == m[1].name:
+                    m[2].data['final_place'] = p_map[p]
+                    assigned = True
+                    new_marking_vector[1].append((p_map[p], m[2]))
+            if not assigned:
+                new_marking_vector[0].append((p_map[p], set()))
+                new_marking_vector[1].append((p_map[p], set()))
+
         else:
-            new_marking_vector.append(p_map[p])
+
+            for i in range(0, len(marking_vector)):
+                if str(p.name) == str(marking_vector[i]):
+                    new_marking_vector.append((p_map[p], i))
 
     for t in source_net.transitions:
         for a in t.in_arcs:
             petri.utils.add_arc_from_to(p_map[a.source], t_map[t], target_net)
         for a in t.out_arcs:
             petri.utils.add_arc_from_to(t_map[t], p_map[a.target], target_net)
+
+    if not upper:
+        new_marking_vector.sort(key=lambda r: r[1])
+
 
     return t_map, p_map, new_marking_vector

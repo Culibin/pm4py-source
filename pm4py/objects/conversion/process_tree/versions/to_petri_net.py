@@ -253,9 +253,13 @@ def recursively_add_tree(tree, net, initial_entity_subtree, final_entity_subtree
         petri.utils.add_arc_from_to(initial_place, petri_trans, net)
         petri.utils.add_arc_from_to(petri_trans, final_place, net)
         tree.place = initial_place
+        tree.data['start_place'] = initial_place
+        tree.data['final_place'] = final_place
 
     if tree.operator == Operator.XOR:
         tree.place = initial_place
+        tree.data['start_place'] = initial_place
+        tree.data['final_place'] = final_place
         for subtree in tree_childs:
             net, counts, intermediate_place = recursively_add_tree(subtree, net, initial_place, final_place, counts,
                                                                    rec_depth + 1, force_add_skip=force_add_skip)
@@ -267,6 +271,8 @@ def recursively_add_tree(tree, net, initial_entity_subtree, final_entity_subtree
         net.transitions.add(new_final_trans)
         petri.utils.add_arc_from_to(new_final_trans, final_place, net)
         tree.place = initial_place
+        tree.data['start_place'] = initial_place
+        tree.data['final_place'] = final_place
 
         for subtree in tree_childs:
             net, counts, intermediate_place = recursively_add_tree(subtree, net, new_initial_trans, new_final_trans,
@@ -279,6 +285,8 @@ def recursively_add_tree(tree, net, initial_entity_subtree, final_entity_subtree
             final_connection_place = None
             if i == len(tree_childs) - 1:
                 final_connection_place = final_place
+                tree.data['start_place'] = initial_place
+                tree.data['final_place'] = final_place
             net, counts, intermediate_place = recursively_add_tree(tree_childs[i], net, intermediate_place,
                                                                    final_connection_place, counts,
                                                                    rec_depth + 1, force_add_skip=force_add_skip)
@@ -286,6 +294,8 @@ def recursively_add_tree(tree, net, initial_entity_subtree, final_entity_subtree
         loop_trans = get_new_hidden_trans(counts, type_trans="loop")
         net.transitions.add(loop_trans)
         tree.place = initial_place
+        tree.data['start_place'] = initial_place
+        tree.data['final_place'] = final_place
         if len(tree_childs) == 1:
             net, counts, intermediate_place = recursively_add_tree(tree_childs[0], net, initial_place, final_place,
                                                                    counts,
