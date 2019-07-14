@@ -68,7 +68,7 @@ def calculate_h(tree, enabled, i_trace, n, i, f, v, t, imatrx, tree_final_markin
     complete_marking = petrinet.Marking()
     complete_marking[t[i_trace][0]] = 1
     # print('vertex', subtree, ':', subtree.name.vertex)
-    print('§§enabled', enabled)
+    print('§§enabled', enabled[1])
     # print('-§§enabled', v)
     '''
     if len(enabled[1]) > 0:
@@ -114,6 +114,8 @@ def calculate_h(tree, enabled, i_trace, n, i, f, v, t, imatrx, tree_final_markin
     ini_vec, fin_vec, cost_vec = a_star.__vectorize_initial_final_cost(imatrx, complete_marking, f, cost_function)
     h, x = a_star.__compute_exact_heuristic(n, imatrx, complete_marking, cost_vec, fin_vec)
     print('heuristic ', h)
+    if h > 9000000000000000:
+        ValueError('Wrong Marking')
     return h
 
 
@@ -180,7 +182,7 @@ def execute(pt, trace):
     all_loop_nodes = list()
 
     activity_key = DEFAULT_NAME_KEY
-    log = xes_importer.import_log("/Users/Ralf/PycharmProjects/pm4py-source/tests/input_data/abac.xes")
+    log = xes_importer.import_log("/Users/Ralf/PycharmProjects/pm4py-source/tests/input_data/ababac.xes")
     net1, init1, final1, trace_place_list = pnet_util.construct_trace_net_marking(log[0], activity_key=activity_key)
     net, init, final = conversion.apply(tree)
 
@@ -242,7 +244,7 @@ def execute(pt, trace):
                 configs.append(
                     (log_config_node, current_node[1], current_node[2], current_node[3], current_node[4], list()))
 
-        print('current keys', current_node[0].data)
+        # print('current keys', current_node[0].data)
         print('configs', configs)
         print('closedList', closed_list)
 
@@ -259,8 +261,7 @@ def execute(pt, trace):
                 configs.append(l[1])
 
         for config in configs:
-            print(configs)
-            print('*configs', config)
+            print('*config', config)
             edge = None
             successor = config[0]
             for incoming in successor.incoming:
@@ -492,8 +493,9 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, loop_config_li
 
             #preclose_enabled = temp_enabled.copy()
 
+            # loop_nodes = close(vertex, temp_enabled, temp_open, temp_closed, temp_f_enabled, list_actions)
+            loop_node = close(vertex, temp_enabled, temp_open, temp_closed, temp_f_enabled, list_actions)
 
-            loop_nodes = close(vertex, temp_enabled, temp_open, temp_closed, temp_f_enabled, list_actions)
             for ts_node in new_ts_nodes:
 
                 '''
@@ -515,6 +517,8 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, loop_config_li
                 configs.append(
                     (ts_node, temp_open, temp_enabled, temp_f_enabled, temp_closed, list_actions, vertex.label))
 
+
+
             # todo add CCCC as closing node (espacially to add the close action to this node)
 
                 if (len(temp_open) + len(temp_enabled) + len(temp_f_enabled)) == 0:
@@ -531,7 +535,22 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, loop_config_li
                         add_node_to_ts(all_states, new_list, ts_node, new_sb_config, ts_system,
                                                       TAU,
                                                       trace,
-                                                      ts_node.name.log, list_actions) '''
+                                               ts_node.name.log, list_actions) '''
+            '''         
+           if loop_node is not None:
+
+               print('looopnode', loop_node)
+               temp2_closed = temp_closed.copy()
+               temp2_f_enabled = temp_f_enabled.copy()
+
+               temp2_closed.remove(loop_node)
+               temp2_f_enabled.add(loop_node)
+
+               for ts_node in new_ts_nodes:
+
+                   configs.append(
+                       (ts_node, temp_open.copy(), temp_enabled.copy(), temp2_f_enabled, temp2_closed, list_actions, vertex.label))
+           '''
 
     return configs
 
@@ -567,9 +586,11 @@ def process_closed(closed_node, enabled, open, closed, f_enabled, list_actions):
                         closed.remove(vertex.children[2])
 
                 elif vertex.children.index(closed_node) == 1:
-                    enabled.add(vertex.children[0])
-                    closed.remove(vertex.children[0])
-                    return vertex.data['loop_i']
+                    print('//closed redo')
+                    enabled.add(vertex)
+                    open.remove(vertex)
+                    return vertex.children[1]
+                    #return vertex.data['loop_i']
 
                 else:
                     print('wtf')
@@ -640,6 +661,8 @@ except Exception:
     print('Could not enable faulthandler')
 
 trace = list()
+trace.append('a')
+trace.append('b')
 trace.append('a')
 trace.append('b')
 trace.append('a')
