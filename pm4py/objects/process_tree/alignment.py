@@ -5,7 +5,8 @@ from pm4py.visualization.transition_system.util import visualize_graphviz as vis
 from pm4py.visualization.transition_system import factory as visual_ts_factory
 
 SKIP = ">>"
-TAU = '\u03C4'
+# TAU = '\u03C4'
+TAU = None
 
 # used for heap to help compare tuples
 counter = 0
