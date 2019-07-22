@@ -110,7 +110,7 @@ def update_node_key(heap, node, value):
         current_node = heapq.heappop(heap)
         if node[0].name == current_node[2][0].name:
             global counter
-            heapq.heappush(copy_heap, (value, -counter, node))
+            heapq.heappush(copy_heap, (value, counter, node))
             counter += 1
         else:
             heapq.heappush(copy_heap, current_node)
@@ -209,7 +209,7 @@ def execute(pt, trace):
 
         # path found
         if 'end' in current_node[0].data and current_node[0].data['end'] is True:
-            print('path found')
+            # print('path found')
             # graph = visual_ts.visualize(ts_system)
             # visual_ts_factory.view(graph)
             # print_path(current_node[0])
@@ -283,7 +283,7 @@ def execute(pt, trace):
                 if config[7] is False:
                     raise ValueError('tes')
             else:
-                heapq.heappush(open_list, (f, -counter, config))
+                heapq.heappush(open_list, (f, counter, config))
                 queued += 1
 
             counter += 1
@@ -614,7 +614,10 @@ def apply():
 
 
 def race(tree, log):
-    align = list(map(lambda trace: execute(tree, trace), log))
+    align = list()  # list(map(lambda trace: execute(tree, trace), log))
+    for i in log:
+        #   print(i)
+        align.append(execute(tree, i))
     return align
 
 

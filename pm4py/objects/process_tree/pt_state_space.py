@@ -58,6 +58,22 @@ class Move(object):
     # derive = property(_get_derive)
 
 
+def cal_repr(self):
+    string = "(" + str(self._log) + ", ("
+
+    for i in range(0, len(self._model)):
+        if self._model[i] == pt_st.State.ENABLED:
+            string += "E"
+        elif self._model[i] == pt_st.State.FUTURE_ENABLED:
+            string += "F"
+        elif self._model[i] == pt_st.State.OPEN:
+            string += "O"
+        elif self._model[i] == pt_st.State.CLOSED:
+            string += "C"
+    string += "))"
+    return string
+
+
 class SbState(object):
     def __init__(self, log, model, node=None, place=None, vertex=None):
         self._log = log
@@ -65,6 +81,7 @@ class SbState(object):
         self._node = node
         self._place = place
         self._vertex = vertex
+        self._repr = cal_repr(self)
 
     def _set_log(self, log):
         self._log = log
@@ -91,19 +108,7 @@ class SbState(object):
         self._vertex = vertex
 
     def __repr__(self):
-        string = "(" + str(self._log) + ", ("
-
-        for i in range(0, len(self._model)):
-            if self._model[i] == pt_st.State.ENABLED:
-                string += "E"
-            elif self._model[i] == pt_st.State.FUTURE_ENABLED:
-                string += "F"
-            elif self._model[i] == pt_st.State.OPEN:
-                string += "O"
-            elif self._model[i] == pt_st.State.CLOSED:
-                string += "C"
-        string += "))"
-        return string
+        return self._repr
 
     def __str__(self):
         return self.__repr__()
