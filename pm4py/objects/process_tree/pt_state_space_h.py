@@ -212,7 +212,7 @@ def execute(pt, trace):
             # print('path found')
             # graph = visual_ts.visualize(ts_system)
             # visual_ts_factory.view(graph)
-            # print_path(current_node[0])
+            #print_path(current_node[0])
 
             return reconstruct_alignment(current_node[0], visited, queued, traversed_arcs)
 
@@ -234,21 +234,18 @@ def execute(pt, trace):
                      current_node[4], list(), None, saw_node))
 
         # print('current keys', current_node[0].data)
-        # print('configs', configs)
+        #print('configs', configs)
         #print('closedList', closed_list)
 
         # heurisic to the explored nodes
 
-        apply_cost_function(current_node[0], 1100, 1100, 1, 0)
+        apply_cost_function(current_node[0], 11000, 11000, 1, 0)
 
-        for l in all_loop_nodes:
 
-            if l[0] == current_node[0]:
-                configs.append(l[1])
 
         for config in configs:
             # print('---*---', len(open_list))
-            # print('*config', config)
+            #print('*config', config)
             traversed_arcs += 1
 
             edge = None
@@ -256,7 +253,6 @@ def execute(pt, trace):
             for incoming in successor.incoming:
                 if incoming.from_state.name == current_node[0].name:
                     edge = incoming
-
             if successor.name in closed_list:
                 continue
 
@@ -270,11 +266,11 @@ def execute(pt, trace):
             successor.data['predecessor'] = current_node[0]
             successor.data['g'] = new_g
 
-            #print('succ', current_node[0], '-->', successor)
+            #print('succ', current_node[0], '--',edge,'-->', successor)
             f = new_g + calculate_h(pt, successor.name.vertex, successor.name.log, net, i_marking, f_marking,
                                     pt_marking_list, trace_marking_list, imatrx, final,
                                     config[4], config[1])
-            # print('heurisik', f, new_g, successor.name)
+            #print('heurisik', f, new_g, successor.name)
 
             if config[7] is True:
                 open_list = update_node_key(open_list, config, f)
@@ -289,7 +285,7 @@ def execute(pt, trace):
             counter += 1
         # print('post openList      top: ' 'h:', top[0],'+', top[1])
         # for o in open_list:
-        #    print('                         ', o)
+        #   print('                         ', o)
 
     print('no path found')
 
@@ -330,6 +326,7 @@ def add_node_to_ts(all_states, new_list, from_ts_node, new_sb_config, ts_system,
 
             sb_state = all_states[all_states.index(new_sb_state)]
             ts_util.add_arc_from_to(Move(trace[trace_i], model_label), from_ts_node, sb_state.node, ts_system, data)
+            new_ts_node = sb_state.node
             list_new_nodes.append((new_ts_node, True))
         else:
             new_ts_node = ts.TransitionSystem.State(new_sb_state)
