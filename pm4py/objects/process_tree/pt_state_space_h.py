@@ -49,10 +49,13 @@ def create_place_tree_list(subtree, subtree_marking):
 
 
 def get_parallel_parents(subtree, parallel_list):
-    if subtree.operator == pt_opt.Operator.PARALLEL:
+    subtree = subtree.parent
+    if subtree is None:
+        return parallel_list
+    if subtree.operator == pt_opt.Operator.PARALLEL and subtree not in parallel_list:
         parallel_list.append(subtree)
     if subtree.parent is not None:
-        get_parallel_parents(subtree.parent, parallel_list)
+        get_parallel_parents(subtree, parallel_list)
     else:
         return parallel_list
 
@@ -60,30 +63,34 @@ def get_parallel_parents(subtree, parallel_list):
 def get_passed_children(tree_list, closed_list, open_list, passed_children):
     for tree in tree_list:
         for child in tree.children:
-            if child in closed_list:
+            if child in closed_list and tree.operator == pt_opt.Operator.PARALLEL and child not in passed_children:
                 passed_children.append(child)
-            if child in open_list:
-                passed_children.append(child)
+            if child in open_list not in tree_list:
+                tree_list.append(child)
 
 
 def calculate_h(tree, enabled, i_trace, n, i, f, v, t, imatrx, tree_final_marking,
-                closed, open):  # (tree, trace, subtree, i_trace):
+                closed, open, ts_system):  # (tree, trace, subtree, i_trace):
 
     complete_marking = petrinet.Marking()
     complete_marking[t[i_trace][0]] = 1
 
     # print('§§enabled', enabled[1])
 
+    # print('t', t[i_trace][0])
+
+    passed_children = list()
+    parallel_parent = list()
 
     if len(enabled[1]) > 0:
         for i in enabled[1]:
+            # print('i', i.data['start_place'])
             complete_marking[i.data['start_place']] = 1
 
-            parallel_parent = list()
-            passed_children = list()
             get_parallel_parents(i, parallel_parent)
             get_passed_children(parallel_parent, closed, open, passed_children)
             for child in passed_children:
+                #print('f', child.data['final_place'])
                 complete_marking[child.data['final_place']] = 1
 
     else:
@@ -99,8 +106,10 @@ def calculate_h(tree, enabled, i_trace, n, i, f, v, t, imatrx, tree_final_markin
     ini_vec, fin_vec, cost_vec = a_star.__vectorize_initial_final_cost(imatrx, complete_marking, f, cost_function)
     h, x = a_star.__compute_exact_heuristic(n, imatrx, complete_marking, cost_vec, fin_vec)
     # print('heuristic ', h)
-    if h > 9000000000000:
-        ValueError('Wrong Marking')
+    if h > 9223372036854:
+        graph = visual_ts.visualize(ts_system)
+        visual_ts_factory.view(graph)
+        raise ValueError('Wrong Marking')
     return h
 
 
@@ -121,7 +130,7 @@ def update_node_key(heap, node, value):
 def is_node_in_heap(heap, node):
     copy_heap = heap.copy()
     while len(copy_heap) != 0:
-        if node == heapq.heappop(copy_heap)[2][0]:
+        if node == heapq.heappop(copy_heap)[2][0].name:
             return True
     return False
 
@@ -183,7 +192,7 @@ def execute(pt, trace):
                                                                                                   ">>",
                                                                                                   marking_vector_tree,
                                                                                                   trace_place_list)
-    # gviz = vi_petri2.graphviz_visualization(net, debug=True)
+    #gviz = vi_petri2.graphviz_visualization(net, debug=True)
     #vi_petri.view(gviz)
 
     imatrx = inicence_m.construct(net)
@@ -201,7 +210,7 @@ def execute(pt, trace):
 
         current_node = top[2]
         visited += 1
-        # print('-s-current', current_node[0], 'o: ', len(open_list), 'h:', top[0],'+', top[1], '              -|-', current_node)
+        #print('-s-current', current_node[0], 'o: ', len(open_list), 'h:', top[0],'+', top[1], '              -|-', current_node)
 
         # print('pre openlist')
         # for o in open_list:
@@ -233,20 +242,23 @@ def execute(pt, trace):
                     (log_config_node, current_node[1], current_node[2], current_node[3],
                      current_node[4], list(), None, saw_node))
 
-        # print('current keys', current_node[0].data)
+        #print('current keys', current_node[0].data)
         #print('configs', configs)
         #print('closedList', closed_list)
 
         # heurisic to the explored nodes
 
-        apply_cost_function(current_node[0], 11000, 11000, 1, 0)
+        apply_cost_function(current_node[0], 10000, 10000, 1, 0)
 
 
 
         for config in configs:
-            # print('---*---', len(open_list))
+            #print('---*---', len(open_list))
             #print('*config', config)
             traversed_arcs += 1
+
+            if isinstance(config[0], SbState):
+                raise ('wrong')
 
             edge = None
             successor = config[0]
@@ -260,7 +272,8 @@ def execute(pt, trace):
                 print('// edge is none')
 
             new_g = current_node[0].data.get('g') + edge.data.get('cost')
-            if is_node_in_heap(open_list, successor.name) and new_g >= successor.data.get('g'):
+            if config[7] and new_g >= successor.data.get(
+                    'g'):  # config[7] statt is_node_in_heap(open_list, successor.name)
                 continue
 
             successor.data['predecessor'] = current_node[0]
@@ -269,23 +282,28 @@ def execute(pt, trace):
             #print('succ', current_node[0], '--',edge,'-->', successor)
             f = new_g + calculate_h(pt, successor.name.vertex, successor.name.log, net, i_marking, f_marking,
                                     pt_marking_list, trace_marking_list, imatrx, final,
-                                    config[4], config[1])
+                                    config[4], config[1], ts_system)
             #print('heurisik', f, new_g, successor.name)
 
             if config[7] is True:
                 open_list = update_node_key(open_list, config, f)
+            else:
+                heapq.heappush(open_list, (f, counter, config))
+                queued += 1
+            '''
             elif is_node_in_heap(open_list, successor.name):  # todo can i replace this with config[7]
                 open_list = update_node_key(open_list, config, f)
                 if config[7] is False:
                     raise ValueError('tes')
-            else:
-                heapq.heappush(open_list, (f, counter, config))
-                queued += 1
+                if config[7] is True:
+                    raise ValueError('nicht ersetzen')
+             '''
+
 
             counter += 1
         # print('post openList      top: ' 'h:', top[0],'+', top[1])
         # for o in open_list:
-        #   print('                         ', o)
+        #      print('                         ', o)
 
     print('no path found')
 
@@ -463,6 +481,7 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, loop_config_li
 
             close(vertex, temp_enabled, temp_open, temp_closed, temp_f_enabled, list_actions)
 
+            # tsnode[0] = ts_node , [1] = is alreads discovered
             for ts_node in new_ts_nodes:
                 configs.append(
                     (ts_node[0], temp_open, temp_enabled, temp_f_enabled, temp_closed,

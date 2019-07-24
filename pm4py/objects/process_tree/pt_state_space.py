@@ -62,14 +62,16 @@ def cal_repr(self):
     string = "(" + str(self._log) + ", ("
 
     for i in range(0, len(self._model)):
-        if self._model[i] == pt_st.State.ENABLED:
+
+        if self._model[i] == pt_st.State.CLOSED:
+            string += "C"
+        elif self._model[i] == pt_st.State.ENABLED:
             string += "E"
-        elif self._model[i] == pt_st.State.FUTURE_ENABLED:
-            string += "F"
         elif self._model[i] == pt_st.State.OPEN:
             string += "O"
-        elif self._model[i] == pt_st.State.CLOSED:
-            string += "C"
+        else:
+            string += "F"
+
     string += "))"
     return string
 
@@ -82,6 +84,7 @@ class SbState(object):
         self._place = place
         self._vertex = vertex
         self._repr = cal_repr(self)
+        self._hashrepr = hash(self._repr)
 
     def _set_log(self, log):
         self._log = log
@@ -114,10 +117,10 @@ class SbState(object):
         return self.__repr__()
 
     def __hash__(self):
-        return hash(self.__repr__())
+        return self._hashrepr
 
     def __eq__(self, other):
-        return True if str(other) == self.__repr__() else False
+        return True if other._hashrepr == self._hashrepr else False
 
     log = property(_get_log, _set_log)
     model = property(_get_model, _set_model)
