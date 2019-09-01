@@ -10,12 +10,14 @@ from pm4py.objects.petri import incidence_matrix as inicence_m
 from pm4py.objects.petri import petrinet as petrinet
 from pm4py.objects.petri import synchronous_product as sync_p
 from pm4py.objects.petri import utils as pnet_util
+from pm4py.objects.petri import semantics as petri_sem
 from pm4py.objects.process_tree import pt_operator as pt_opt
 from pm4py.objects.process_tree import state as pt_st
 from pm4py.objects.process_tree import util as pt_util
 from pm4py.objects.process_tree.alignment import apply_cost_function_ts_node_outgoing as apply_cost_function
 from pm4py.objects.process_tree.pt_state_space import Move as Move
 from pm4py.objects.process_tree.pt_state_space import SbState as SbState
+from pm4py.objects.process_tree.pt_state_space import MoveClass as MoveClass
 from pm4py.objects.process_tree.semantics import populate_closed as populate_closed
 from pm4py.objects.transition_system import transition_system as ts
 from pm4py.objects.transition_system import utils as ts_util
@@ -69,11 +71,25 @@ def get_passed_children(tree_list, closed_list, open_list, passed_children):
                 tree_list.append(child)
 
 
-def calculate_h(tree, enabled, i_trace, n, i, f, v, t, imatrx, tree_final_marking,
-                closed, open, ts_system):  # (tree, trace, subtree, i_trace):
+def get_t(net, marking, move):
+    for t in petri_sem.enabled_transitions(net, marking):
+        if a_star.__is_log_move(t, SKIP) and move is MoveClass.LOG:
+            return t
+
+        elif a_star.__is_model_move(t, SKIP) and move is MoveClass.MODEL:
+            return t
+
+        elif move is MoveClass.SYNC:
+            return t
+    raise ValueError('No transition found')
+
+
+def calculate_h(tree, enabled, i_trace, n, i, f, v, tracelist, imatrx, tree_final_marking,
+                closed, open, ts_system, pre_h, pre_x, move, pre_marking,
+                cost_function):  # (tree, trace, subtree, i_trace):
 
     complete_marking = petrinet.Marking()
-    complete_marking[t[i_trace][0]] = 1
+    complete_marking[tracelist[i_trace][0]] = 1
 
     # print('§§enabled', enabled[1])
 
@@ -101,25 +117,35 @@ def calculate_h(tree, enabled, i_trace, n, i, f, v, t, imatrx, tree_final_markin
     # gviz = vi_petri2.graphviz_visualization(n, debug=True)
     # vi_petri.view(gviz)
 
-    cost_function = align_utils.construct_standard_cost_function(n, ">>")
+    h = pre_h
+    x = pre_h
 
-    ini_vec, fin_vec, cost_vec = a_star.__vectorize_initial_final_cost(imatrx, complete_marking, f, cost_function)
-    h, x = a_star.__compute_exact_heuristic(n, imatrx, complete_marking, cost_vec, fin_vec)
+    if complete_marking != pre_marking:
+
+        ini_vec, fin_vec, cost_vec = a_star.__vectorize_initial_final_cost(imatrx, complete_marking, f, cost_function)
+
+        if not a_star.__trust_solution(pre_x):
+            h, x = a_star.__compute_exact_heuristic(n, imatrx, complete_marking, cost_vec, fin_vec)
+
+        else:
+            t = get_t(n, pre_marking, move)
+            h, x = a_star.__derive_heuristic(imatrx, cost_vec, pre_x, t, pre_h)
+
     # print('heuristic ', h)
-    if h > 9223372036854:
+    if h > 922337203685:
         graph = visual_ts.visualize(ts_system)
         visual_ts_factory.view(graph)
         raise ValueError('Wrong Marking')
-    return h
+    return h, x, complete_marking
 
 
-def update_node_key(heap, node, value):
+def update_node_key(heap, node, value, h, x, marking):
     copy_heap = []
     while len(heap) != 0:
         current_node = heapq.heappop(heap)
         if node[0].name == current_node[2][0].name:
             global counter
-            heapq.heappush(copy_heap, (value, counter, node))
+            heapq.heappush(copy_heap, (value, counter, node, h, x, marking))
             counter += 1
         else:
             heapq.heappush(copy_heap, current_node)
@@ -160,9 +186,6 @@ def execute(pt, trace):
     enabled.add(pt)
     populate_closed(pt.children, closed)
 
-    config = (init_ts_node, open, enabled, f_enabled, closed, list())
-
-    heapq.heappush(open_list, (0, counter, config))
     counter += 1
     all_states = [init_sb_node]
 
@@ -197,8 +220,22 @@ def execute(pt, trace):
 
     imatrx = inicence_m.construct(net)
 
-    visited = 1
-    queued = 1
+    i_marking = petrinet.Marking()
+    i_marking[trace_marking_list[0][0]] = 1
+
+    for i in init_ts_node.name.vertex[1]:
+        i_marking[i.data['start_place']] = 1
+
+    cost_function = align_utils.construct_standard_cost_function(net, ">>")
+    ini_vec, fin_vec, cost_vec = a_star.__vectorize_initial_final_cost(imatrx, i_marking, f_marking, cost_function)
+
+    h, x = a_star.__compute_exact_heuristic(net, imatrx, i_marking, cost_vec, fin_vec)
+
+    config = (init_ts_node, open, enabled, f_enabled, closed, list(), None, False, False)
+    heapq.heappush(open_list, (0, counter, config, h, x, i_marking))
+
+    visited = 0
+    queued = 0
     traversed_arcs = 0
 
     # rename trace
@@ -228,19 +265,20 @@ def execute(pt, trace):
         closed_list.add(current_node[0].name)
 
         loop_list = list()
+        configs = list()
 
-        # 0 = ts_node 1 = open, 2 = enabled , 3 = f_enabled, 4 = closed . 5 list_action 6 vertex label, 7 node seen
+        # 0 = ts_node 1 = open, 2 = enabled , 3 = f_enabled, 4 = closed . 5 list_action 6 vertex label, 7 node seen, 8 predecessor move
         configs = explore_model(current_node[2], current_node[1], current_node[2], current_node[3], current_node[4]
                                 , loop_list, current_node[0], trace, current_node[0].name.log
                                 , ts_system, all_states, current_node[5])
 
-        if len(trace) > current_node[0].name.log:
+        if current_node[8] is not MoveClass.MODEL and len(trace) > current_node[0].name.log:
             log_config_node, saw_node = explore_log(loop_list, current_node[0], all_states, ts_system, trace,
                                           current_node[0].name.log, current_node[5])
             if log_config_node is not None:
                 configs.append(
                     (log_config_node, current_node[1], current_node[2], current_node[3],
-                     current_node[4], list(), None, saw_node))
+                     current_node[4], list(), None, saw_node, MoveClass.LOG))
 
         #print('current keys', current_node[0].data)
         #print('configs', configs)
@@ -248,10 +286,9 @@ def execute(pt, trace):
 
         # heurisic to the explored nodes
 
-        apply_cost_function(current_node[0], 10000, 10000, 1, 0)
+        apply_cost_function(current_node[0], 10000, 10000, 1, 0)  # todo replace
 
-
-
+        #print(len(configs))
         for config in configs:
             #print('---*---', len(open_list))
             #print('*config', config)
@@ -263,6 +300,7 @@ def execute(pt, trace):
             edge = None
             successor = config[0]
             for incoming in successor.incoming:
+                #print(incoming.from_state.name, "-", current_node[0].name)
                 if incoming.from_state.name == current_node[0].name:
                     edge = incoming
             if successor.name in closed_list:
@@ -280,15 +318,18 @@ def execute(pt, trace):
             successor.data['g'] = new_g
 
             #print('succ', current_node[0], '--',edge,'-->', successor)
-            f = new_g + calculate_h(pt, successor.name.vertex, successor.name.log, net, i_marking, f_marking,
-                                    pt_marking_list, trace_marking_list, imatrx, final,
-                                    config[4], config[1], ts_system)
+            h, x, marking = calculate_h(pt, successor.name.vertex, successor.name.log, net, i_marking, f_marking,
+                                        pt_marking_list, trace_marking_list, imatrx, final,
+                                        config[4], config[1], ts_system, top[3], top[4],
+                                        top[2][0].name.get_edge_to(config[0]).get_move_class(), top[5], cost_function)
+
+            f = new_g + h
             #print('heurisik', f, new_g, successor.name)
 
             if config[7] is True:
-                open_list = update_node_key(open_list, config, f)
+                open_list = update_node_key(open_list, config, f, h, x, marking)
             else:
-                heapq.heappush(open_list, (f, counter, config))
+                heapq.heappush(open_list, (f, counter, config, h, x, marking))
                 queued += 1
             '''
             elif is_node_in_heap(open_list, successor.name):  # todo can i replace this with config[7]
@@ -314,7 +355,9 @@ def execute(pt, trace):
 
 def add_node_to_ts(all_states, new_list, from_ts_node, new_sb_config, ts_system, model_label, trace, trace_i,
                    list_action, vertex):
+
     # todo: actions in die kanten ? besonders in hinblick auf loop redo kante zu alten knoten
+
     new_sb_state = SbState(trace_i, new_sb_config, vertex=vertex)
     data = dict()
     data['action'] = list_action.copy
@@ -325,7 +368,7 @@ def add_node_to_ts(all_states, new_list, from_ts_node, new_sb_config, ts_system,
         sb_state = all_states[all_states.index(new_sb_state)]
         ts_util.add_arc_from_to(Move(SKIP, model_label), from_ts_node, sb_state.node, ts_system, data)
         new_ts_node = sb_state.node
-        list_new_nodes.append((new_ts_node, True))
+        list_new_nodes.append((new_ts_node, True, MoveClass.MODEL))
     else:
 
         new_ts_node = ts.TransitionSystem.State(new_sb_state)
@@ -333,7 +376,7 @@ def add_node_to_ts(all_states, new_list, from_ts_node, new_sb_config, ts_system,
         ts_system.states.add(new_ts_node)
         ts_util.add_arc_from_to(Move(SKIP, model_label), from_ts_node, new_ts_node, ts_system, data)
         all_states.append(new_sb_state)
-        list_new_nodes.append((new_ts_node, False))
+        list_new_nodes.append((new_ts_node, False, MoveClass.MODEL))
 
     if len(trace) > trace_i and model_label == trace[trace_i]:
         data = dict()
@@ -345,14 +388,14 @@ def add_node_to_ts(all_states, new_list, from_ts_node, new_sb_config, ts_system,
             sb_state = all_states[all_states.index(new_sb_state)]
             ts_util.add_arc_from_to(Move(trace[trace_i], model_label), from_ts_node, sb_state.node, ts_system, data)
             new_ts_node = sb_state.node
-            list_new_nodes.append((new_ts_node, True))
+            list_new_nodes.append((new_ts_node, True, MoveClass.SYNC))
         else:
             new_ts_node = ts.TransitionSystem.State(new_sb_state)
             new_sb_state._node = new_ts_node
             ts_system.states.add(new_ts_node)
             ts_util.add_arc_from_to(Move(trace[trace_i], model_label), from_ts_node, new_ts_node, ts_system, data)
             all_states.append(new_sb_state)
-            list_new_nodes.append((new_ts_node, False))
+            list_new_nodes.append((new_ts_node, False, MoveClass.SYNC))
 
     return list_new_nodes
 
@@ -376,9 +419,9 @@ def states_to_config(open, enabled, f_enabled, closed):
             config.append(pt_st.State.ENABLED)
         elif i in f_enabled:
             config.append(pt_st.State.FUTURE_ENABLED)
-        elif i in closed:
+        elif i in closed:  # todo  change to else i final version
             config.append(pt_st.State.CLOSED)
-        else:
+        else:  # todo in final version remove
             raise ValueError("i has no state")
 
     return config
@@ -404,6 +447,7 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, loop_config_li
             v_list_actions = list_actions.copy()
             v_list_actions.append((vertex.index_c, Action.START))
 
+            # todo kopierfunktion programmieren für die vielen kopien
             # sequence
             if vertex.operator is pt_opt.Operator.SEQUENCE:
                 temp_enabled.add(vertex.children[0])
@@ -485,17 +529,20 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, loop_config_li
             for ts_node in new_ts_nodes:
                 configs.append(
                     (ts_node[0], temp_open, temp_enabled, temp_f_enabled, temp_closed,
-                     list_actions, vertex.label, ts_node[1]))
+                     list_actions, vertex.label, ts_node[1], ts_node[2]))
                 ts_node = ts_node[0]
-            # todo add CCCC as closing node (espacially to add the close action to this node)
+                # todo add CCCC as closing node (espacially to add the close action to this node) or save action list in final node
 
                 if (len(temp_open) + len(temp_enabled) + len(temp_f_enabled)) == 0:
 
                     ts_node.data['end'] = False
+                    ts_node.data['action'] = list_actions
+                    list_actions.clear()
 
                     if ts_node.name.log == len(trace):
                         ts_node.data['end'] = True
-            if len(configs) == 0 and len(new_ts_nodes) != 0:
+
+            if len(configs) == 0 and len(new_ts_nodes) != 0:  # todo remove in final version
                 graph = visual_ts.visualize(ts_system)
                 visual_ts_factory.view(graph)
                 raise ValueError('error')
@@ -559,10 +606,12 @@ def explore_log(new_list, from_ts_node, all_states, ts_system, trace, trace_i, l
 
     if len(trace) != trace_i:
         if sb_new_node in all_states:
+            #print('a')
             ts_new_node = all_states[all_states.index(sb_new_node)].node
             ts_util.add_arc_from_to(Move(trace[trace_i], SKIP), from_ts_node, ts_new_node, ts_system, data)
             return ts_new_node, True
         else:
+            # print('b', from_ts_node, '-', from_ts_node)
             ts_new_node = ts.TransitionSystem.State(sb_new_node)
             sb_new_node.node = ts_new_node
             ts_util.add_arc_from_to(Move(trace[trace_i], SKIP), from_ts_node, ts_new_node, ts_system, data)
@@ -635,6 +684,7 @@ def race(tree, log):
         #   print(i)
         align.append(execute(tree, i))
     return align
+
 
 
 '''   

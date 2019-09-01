@@ -6,8 +6,19 @@ from pm4py.objects.process_tree import util as pt_util
 from pm4py.visualization.transition_system.util import visualize_graphviz as visual_ts
 from pm4py.visualization.transition_system import factory as visual_ts_factory
 
+from enum import Enum
+
 SKIP = ">>"
 TAU = '\u03C4'
+
+
+class MoveClass(Enum):
+    # Log Move
+    LOG = 1
+    # Model Move
+    MODEL = 2
+    # Sync move
+    SYNC = 3
 
 
 class Move(object):
@@ -52,6 +63,18 @@ class Move(object):
 
     def __eq__(self, other):
         return True if str(other) == self.__repr__() else False
+
+    def get_move_class(self):
+        if self.log is TAU or self.model is TAU:
+            return TAU
+        elif self.log is SKIP:
+            return MoveClass.MODEL
+
+        elif self.model is SKIP:
+            return MoveClass.LOG
+        else:
+            return MoveClass.SYNC
+
 
     log = property(_get_log, _set_log)
     model = property(_get_model, _set_model)
@@ -121,6 +144,13 @@ class SbState(object):
 
     def __eq__(self, other):
         return True if other._hashrepr == self._hashrepr else False
+
+    def get_edge_to(self, to_state):
+
+        for edge in self.node.outgoing:
+            if edge.to_state == to_state:
+                return edge.name
+        return None
 
     log = property(_get_log, _set_log)
     model = property(_get_model, _set_model)
