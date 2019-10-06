@@ -86,7 +86,7 @@ def get_t(net, marking, move):
 
 def calculate_h(tree, enabled, i_trace, n, i, f, v, tracelist, imatrx, tree_final_marking,
                 closed, open, ts_system, pre_h, pre_x, move, pre_marking,
-                cost_function):  # (tree, trace, subtree, i_trace):
+                cost_function, h_marking):  # (tree, trace, subtree, i_trace):
 
     complete_marking = petrinet.Marking()
     complete_marking[tracelist[i_trace][0]] = 1
@@ -117,10 +117,31 @@ def calculate_h(tree, enabled, i_trace, n, i, f, v, tracelist, imatrx, tree_fina
     # gviz = vi_petri2.graphviz_visualization(n, debug=True)
     # vi_petri.view(gviz)
 
-    h = pre_h
-    x = pre_h
+    # h = pre_h
+    # x = pre_h
 
-    if complete_marking != pre_marking:
+    h = 0
+    x = 0
+
+    goon = True
+
+    if complete_marking in h_marking.keys():
+        tuple = h_marking.get(complete_marking)
+        h = tuple[0]
+        x = tuple[1]
+        goon = False
+
+
+    else:
+
+        ini_vec, fin_vec, cost_vec = a_star.__vectorize_initial_final_cost(imatrx, complete_marking, f, cost_function)
+
+        h, x = a_star.__compute_exact_heuristic(n, imatrx, complete_marking, cost_vec, fin_vec)
+
+        h_marking[complete_marking] = (h, x)
+
+    '''
+    if complete_marking != pre_marking and goon:
 
         ini_vec, fin_vec, cost_vec = a_star.__vectorize_initial_final_cost(imatrx, complete_marking, f, cost_function)
 
@@ -131,12 +152,16 @@ def calculate_h(tree, enabled, i_trace, n, i, f, v, tracelist, imatrx, tree_fina
             t = get_t(n, pre_marking, move)
             h, x = a_star.__derive_heuristic(imatrx, cost_vec, pre_x, t, pre_h)
 
+    
+        
+    '''
+
     # print('heuristic ', h)
     if h > 922337203685:
         graph = visual_ts.visualize(ts_system)
         visual_ts_factory.view(graph)
         raise ValueError('Wrong Marking')
-    return h, x, complete_marking
+    return 0, 0, complete_marking
 
 
 def update_node_key(heap, node, value, h, x, marking):
@@ -162,8 +187,7 @@ def is_node_in_heap(heap, node):
 
 
 def execute(pt, trace):
-    # todo heurisik einbauen
-    #
+
     open_list = []
     closed_list = set()
 
@@ -237,27 +261,37 @@ def execute(pt, trace):
     visited = 0
     queued = 0
     traversed_arcs = 0
+    h_marking = dict()
 
     # rename trace
     trace = list(map(lambda event: event["concept:name"], trace))
 
     while not len(open_list) == 0:
 
+        ''' 
+        if counter > 466:
+            graph = visual_ts.visualize(ts_system)
+            visual_ts_factory.view(graph)
+            print_path(current_node[0])
+            raise ValueError("Ende")
+        '''
+
         top = heapq.heappop(open_list)
 
         current_node = top[2]
         visited += 1
-        #print('-s-current', current_node[0], 'o: ', len(open_list), 'h:', top[0],'+', top[1], '              -|-', current_node)
+        print('-s-current', current_node[0], 'len ol: ', len(open_list), 'h:', top[0], ' -', top[1],
+              '              -|-', current_node)
 
         # print('pre openlist')
         # for o in open_list:
-        #    print('                         ', o)
+        #print('                         ', o)
 
         # path found
         if 'end' in current_node[0].data and current_node[0].data['end'] is True:
             # print('path found')
             # graph = visual_ts.visualize(ts_system)
-            # visual_ts_factory.view(graph)
+            #visual_ts_factory.view(graph)
             #print_path(current_node[0])
 
             return reconstruct_alignment(current_node[0], visited, queued, traversed_arcs)
@@ -321,7 +355,8 @@ def execute(pt, trace):
             h, x, marking = calculate_h(pt, successor.name.vertex, successor.name.log, net, i_marking, f_marking,
                                         pt_marking_list, trace_marking_list, imatrx, final,
                                         config[4], config[1], ts_system, top[3], top[4],
-                                        top[2][0].name.get_edge_to(config[0]).get_move_class(), top[5], cost_function)
+                                        top[2][0].name.get_edge_to(config[0]).get_move_class(), top[5], cost_function,
+                                        h_marking)
 
             f = new_g + h
             #print('heurisik', f, new_g, successor.name)
@@ -342,9 +377,9 @@ def execute(pt, trace):
 
 
             counter += 1
-        # print('post openList      top: ' 'h:', top[0],'+', top[1])
-        # for o in open_list:
-        #      print('                         ', o)
+        print('post openList      top: ' 'h:', top[0], '+', top[1])
+        for o in open_list:
+            print('                         ', o)
 
     print('no path found')
 
@@ -542,10 +577,10 @@ def explore_model(fire_enabled, open, enabled, f_enabled, closed, loop_config_li
                     if ts_node.name.log == len(trace):
                         ts_node.data['end'] = True
 
-            if len(configs) == 0 and len(new_ts_nodes) != 0:  # todo remove in final version
-                graph = visual_ts.visualize(ts_system)
-                visual_ts_factory.view(graph)
-                raise ValueError('error')
+            # if len(configs) == 0 and len(new_ts_nodes) != 0:  # todo remove in final version
+            #    graph = visual_ts.visualize(ts_system)
+            #    visual_ts_factory.view(graph)
+            #    raise ValueError('error')
 
     return configs
 
